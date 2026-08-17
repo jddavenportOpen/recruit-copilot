@@ -1,0 +1,52 @@
+{
+  "_note": "Fictional template for Alex Rivera. Replace everything with your own real, confirmable history. See ONBOARDING.md.",
+  "pinned_facts": [
+    "Legal name: Alex Rivera",
+    "Authorized to work in the US, no sponsorship required"
+  ],
+  "jobs": [
+    {
+      "id": "northwind-2022",
+      "title": "Senior Software Engineer",
+      "company": "Northwind Labs",
+      "location": "Remote",
+      "dates": "2022 to Present",
+      "bullets": {
+        "latency": "Cut checkout latency from 3.2s to 410ms by rebuilding the pricing path as a streaming service, lifting conversion 5 percent.",
+        "mentor": "Mentored 4 engineers and introduced the review checklist the platform team later adopted org-wide.",
+        "cost": "Reduced cloud spend 18 percent by right-sizing the batch fleet and autoscaling on real demand signals.",
+        "reliability": "Drove p99 error rate from 1.4 percent to 0.2 percent by adding backpressure and idempotent retries to the ingest queue."
+      },
+      "required_bullets": ["latency"]
+    },
+    {
+      "id": "harbor-2019",
+      "title": "Software Engineer",
+      "company": "Harbor Analytics",
+      "location": "Austin, TX",
+      "dates": "2019 to 2022",
+      "bullets": {
+        "pipeline": "Built the ETL pipeline that consolidated 6 data sources into one warehouse, cutting report turnaround from days to minutes.",
+        "api": "Shipped the public REST API used by 30 partner integrations, with versioning and rate limiting from day one.",
+        "oncall": "Owned on-call for the data platform and wrote the runbooks that cut mean time to recovery by 40 percent."
+      },
+      "required_bullets": ["pipeline"]
+    }
+  ],
+  "summaries": {
+    "backend": "Backend engineer with 6 years building low-latency services and data platforms. Ships reliable systems, mentors teams, and cares about the cost and correctness of what runs in production.",
+    "platform": "Platform-minded engineer who turns fragile services into dependable ones. Owns latency, reliability, and cost, and leaves behind the practices a team keeps using."
+  },
+  "skills_pool": {
+    "languages": "Python, Go, TypeScript, SQL",
+    "systems": "Postgres, Kafka, Redis, Kubernetes, AWS",
+    "practices": "Distributed systems, streaming pipelines, observability, on-call, code review"
+  },
+  "education": [
+    {
+      "school": "State University",
+      "degree": "BS, Computer Science",
+      "dates": "2015 to 2019"
+    }
+  ]
+}

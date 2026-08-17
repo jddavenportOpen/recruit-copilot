@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Recruiting Dashboard</title>
+<style>
+  :root{
+    --bg:#0f1115; --panel:#171a21; --panel2:#1e222b; --line:#2a2f3a;
+    --ink:#e6e9ef; --muted:#9aa3b2; --accent:#6ea8fe; --good:#4ade80; --warn:#fbbf24; --bad:#f87171;
+    --chip:#232834;
+  }
+  @media (prefers-color-scheme:light){
+    :root{ --bg:#f6f7f9; --panel:#ffffff; --panel2:#f0f2f5; --line:#e2e6ec;
+      --ink:#1a1d23; --muted:#5b6472; --accent:#2563eb; --chip:#eef1f5; }
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+  header{padding:18px 24px;border-bottom:1px solid var(--line);display:flex;align-items:baseline;gap:14px;flex-wrap:wrap}
+  header h1{font-size:18px;margin:0;font-weight:650}
+  header .sub{color:var(--muted);font-size:12.5px}
+  nav{display:flex;gap:4px;padding:10px 16px;border-bottom:1px solid var(--line);flex-wrap:wrap;position:sticky;top:0;background:var(--bg);z-index:5}
+  nav button{background:transparent;border:1px solid transparent;color:var(--muted);padding:7px 14px;border-radius:8px;cursor:pointer;font-size:13.5px;font-weight:550}
+  nav button:hover{color:var(--ink);background:var(--panel2)}
+  nav button.active{color:var(--ink);background:var(--panel);border-color:var(--line)}
+  main{padding:22px 24px;max-width:1080px;margin:0 auto}
+  .tab{display:none}.tab.active{display:block}
+  .grid{display:grid;gap:12px}
+  .cards{grid-template-columns:repeat(auto-fill,minmax(240px,1fr))}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 16px}
+  .card h3{margin:0 0 8px;font-size:14px}
+  .kpis{grid-template-columns:repeat(auto-fill,minmax(150px,1fr));margin-bottom:18px}
+  .kpi{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 16px}
+  .kpi .n{font-size:26px;font-weight:700;letter-spacing:-.5px}
+  .kpi .l{color:var(--muted);font-size:12px;margin-top:2px}
+  .row{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--line)}
+  .row:last-child{border-bottom:none}
+  .chip{display:inline-block;background:var(--chip);border-radius:999px;padding:2px 9px;font-size:11.5px;color:var(--muted);margin:2px 3px 0 0}
+  .score{font-weight:700;font-size:15px}
+  .g{color:var(--good)}.w{color:var(--warn)}.b{color:var(--bad)}.m{color:var(--muted)}
+  .bar{height:6px;background:var(--panel2);border-radius:4px;overflow:hidden;margin-top:6px}
+  .bar>i{display:block;height:100%;background:var(--accent)}
+  .note{color:var(--muted);font-size:12.5px;background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin:6px 0 16px}
+  .title{font-weight:600}.mut{color:var(--muted);font-size:12.5px}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line)}
+  th{color:var(--muted);font-weight:600;font-size:11.5px;text-transform:uppercase;letter-spacing:.4px}
+  .pill{font-size:11px;padding:2px 8px;border-radius:999px;font-weight:600}
+  .pill.on{background:rgba(74,222,128,.15);color:var(--good)}
+  .pill.off{background:rgba(251,191,36,.15);color:var(--warn)}
+  .wrap{overflow-x:auto}
+  .empty{color:var(--muted);padding:14px 0}
+  code{background:var(--panel2);padding:1px 6px;border-radius:5px;font-size:12px}
+</style>
+</head>
+<body>
+<header>
+  <h1>Recruiting Dashboard</h1>
+  <span class="sub" id="sub">loading…</span>
+</header>
+<nav id="nav"></nav>
+<main>
+  <div class="tab" id="t-resume"></div>
+  <div class="tab" id="t-goals"></div>
+  <div class="tab" id="t-jobs"></div>
+  <div class="tab" id="t-networking"></div>
+  <div class="tab" id="t-applications"></div>
+  <div class="tab" id="t-system"></div>
+</main>
+<script>
+const TABS=[["resume","Resume"],["goals","Goals"],["jobs","Jobs"],["networking","Networking"],["applications","Applications"],["system","System Health"]];
+const $=s=>document.querySelector(s);
+const el=(t,c,h)=>{const e=document.createElement(t);if(c)e.className=c;if(h!=null)e.innerHTML=h;return e;};
+function scoreClass(n){return n==null?"m":n>=90?"g":n>=80?"w":n>=70?"":"b";}
+function esc(s){return (s==null?"":String(s)).replace(/[&<>]/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[m]));}
+
+let DATA={};
+function nav(){const n=$("#nav");TABS.forEach(([id,label],i)=>{const b=el("button",i===0?"active":"",label);b.onclick=()=>{document.querySelectorAll("nav button").forEach(x=>x.classList.remove("active"));b.classList.add("active");document.querySelectorAll(".tab").forEach(x=>x.classList.remove("active"));$("#t-"+id).classList.add("active");};n.appendChild(b);});$("#t-resume").classList.add("active");}
+
+function kpis(items){const g=el("div","grid kpis");items.forEach(([n,l,cls])=>{const k=el("div","kpi");k.appendChild(el("div","n "+(cls||""),n));k.appendChild(el("div","l",l));g.appendChild(k);});return g;}
+function note(t){return el("div","note",esc(t));}
+
+function renderResume(d){const c=$("#t-resume");c.innerHTML="";
+  const m=d.master||{};
+  c.appendChild(kpis([[d.count||0,"resumes generated"],[m.jobs||0,"jobs in master bank"],[(m.summaries||[]).length,"role variants"]]));
+  const mc=el("div","card");mc.appendChild(el("h3",null,"Master resume &nbsp;<span class='mut'>"+esc((m.updated||"").slice(0,10))+"</span>"));
+  mc.innerHTML+=(m.job_titles||[]).map(t=>"<span class='chip'>"+esc(t)+"</span>").join("");
+  c.appendChild(mc);
+  const list=el("div","grid cards");(d.resumes||[]).forEach(r=>{const card=el("div","card");
+    let s=r.panel_avg!=null?`<span class='score ${scoreClass(r.panel_avg)}'>${r.panel_avg}</span> <span class='mut'>/100 · ${r.interview_votes??"-"}/3 votes</span>`:`<span class='mut'>ungraded</span>`;
+    card.innerHTML=`<div class='title'>${esc(r.title)}</div><div class='mut'>${esc((r.updated||"").slice(0,10))} · ${r.kb}kb</div><div style='margin-top:8px'>${s}</div>`;
+    if(r.personas){card.innerHTML+=`<div class='mut' style='margin-top:6px'>HM ${r.personas.hiring_manager??"-"} · Rec ${r.personas.recruiter??"-"} · AISys ${r.personas.ai_systems_rep??"-"}</div>`;}
+    if(r.keyword_match_pct!=null)card.innerHTML+=`<span class='chip'>kw ${r.keyword_match_pct}%</span>`;
+    if(r.ai_risk)card.innerHTML+=`<span class='chip'>AI-risk ${esc(r.ai_risk)}</span>`;
+    list.appendChild(card);});
+  c.appendChild(list);
+}
+
+function renderGoals(d){const c=$("#t-goals");c.innerHTML="";
+  const gs=d.goals||[];
+  c.appendChild(kpis([[gs.length,"tracked goals"],[gs.filter(g=>g.status==="active").length,"active"],[gs.filter(g=>g.status==="done").length,"done"]]));
+  const order={quarterly:0,needle_mover:1,goal:2,requirement:3,blocker:0};
+  gs.sort((a,b)=>(order[a.kind]??9)-(order[b.kind]??9));
+  const card=el("div","card");
+  gs.forEach(g=>{const row=el("div","row");const p=g.progress!=null?g.progress:"";
+    row.innerHTML=`<div style='flex:1'><span class='chip'>${esc(g.kind)}</span> <span class='title'>${g.parent?"↳ ":""}${esc(g.title)}</span>
+      ${p!==""?`<div class='bar'><i style='width:${p}%'></i></div>`:""}</div>
+      <div style='text-align:right;min-width:90px'><span class='pill ${g.status==="done"?"on":"off"}'>${esc(g.status||"")}</span>${p!==""?`<div class='mut'>${p}%</div>`:""}</div>`;
+    card.appendChild(row);});
+  c.appendChild(gs.length?card:el("div","empty","No goals found."));
+}
+
+function renderJobs(d){const c=$("#t-jobs");c.innerHTML="";
+  const j=d.jobs||[];
+  const boards=(d.sources||[]).filter(s=>s.ok).length;
+  const withComp=j.filter(x=>x.comp).length;
+  c.appendChild(kpis([[d.total_matched??j.length,"matched roles"],[boards,"boards scouted"],["$"+(((d.criteria||{}).comp_min||350000)/1000)+"k+","comp target"],[withComp+"/"+j.length,"comp listed"]]));
+  if(d.generated)c.appendChild(el("div","mut","last scouted "+esc(d.generated.slice(0,16).replace("T"," "))+" · "+esc(d.note||"")));
+  if(!j.length){c.appendChild(note(d.note||"No jobs yet. Run job_scout.py."));return;}
+  const wrap=el("div","wrap card");let h="<table><tr><th>Match</th><th>Company</th><th>Role</th><th>Location</th><th>Comp</th></tr>";
+  j.forEach(x=>{const role=x.url?`<a href='${esc(x.url)}' target='_blank' style='color:var(--accent);text-decoration:none'>${esc(x.title)}</a>`:esc(x.title);
+    h+=`<tr><td class='score ${scoreClass(x.match)}'>${x.match??"-"}</td><td>${esc(x.company)}</td><td>${role}</td><td class='mut'>${esc(x.location||"")}</td><td>${esc(x.comp||"-")}</td></tr>`;});
+  wrap.innerHTML=h+"</table>";c.appendChild(wrap);
+}
+
+function renderNetworking(d){const c=$("#t-networking");c.innerHTML="";
+  const g=d.trust_gate||{};
+  c.appendChild(kpis([[ (d.contacts||[]).length,"contacts"],[(d.meetings||[]).length,"meetings set"],[g.outreach_automation||"OFF","auto-outreach",g.outreach_automation==="ON"?"g":"w"]]));
+  const gate=el("div","card");gate.innerHTML=`<h3>Trust gate</h3><span class='pill ${g.outreach_automation==="ON"?"on":"off"}'>outreach automation: ${esc(g.outreach_automation||"OFF")}</span><div class='mut' style='margin-top:8px'>${esc(g.reason||"Human-approved until messaging is proven not-AI-sounding and not ban-risk.")}</div>`;
+  c.appendChild(gate);
+  if(!(d.contacts||[]).length){c.appendChild(note(d.note||""));return;}
+  const wrap=el("div","wrap card");let h="<table><tr><th>Contact</th><th>Company</th><th>Last messaged</th><th>Cadence</th><th>Meeting</th></tr>";
+  (d.contacts||[]).forEach(x=>h+=`<tr><td>${esc(x.name)}</td><td>${esc(x.company||"")}</td><td>${esc(x.last_messaged||"-")}</td><td>${esc(x.cadence||"")}</td><td>${esc(x.meeting||"")}</td></tr>`);
+  wrap.innerHTML=h+"</table>";c.appendChild(wrap);
+}
+
+function renderApplications(d){const c=$("#t-applications");c.innerHTML="";
+  c.appendChild(kpis([
+    [d.officially_submitted||0,"submitted (you click)"],
+    [d.verified_applied||0,"verified applied",(d.verified_applied?"g":"m")],
+    [d.avg_score??"-","avg resume score",scoreClass(d.avg_score)],
+    [d.total_batches||0,"copilot runs"]]));
+  c.appendChild(note(d.note||""));
+  if(!(d.recent||[]).length){c.appendChild(el("div","empty","No application records yet. Run the copilot on a job URL and it appears here."));return;}
+  const wrap=el("div","wrap card");let h="<table><tr><th>When</th><th>Company</th><th>Role</th><th>Score</th><th>Status</th><th>Verified</th></tr>";
+  (d.recent||[]).forEach(x=>h+=`<tr><td class='mut'>${esc((x.ts||"").slice(0,10))}</td><td>${esc(x.company)}</td><td>${esc(x.title)}</td><td class='${scoreClass(x.panel_avg)}'>${x.panel_avg??"-"}</td><td>${esc(x.status)}</td><td>${x.verified_applied?"<span class='pill on'>yes</span>":"<span class='mut'->-</span>"}</td></tr>`);
+  wrap.innerHTML=h+"</table>";c.appendChild(wrap);
+}
+
+function renderSystem(d){const c=$("#t-system");c.innerHTML="";
+  c.appendChild(kpis([[d.total_agent_defs||0,"agent defs"],[d.total_skills||0,"skills"],[(d.recruiting_specialists||[]).length,"recruiting specialists"]]));
+  const p=el("div","card");p.appendChild(el("h3",null,"Apply pipeline (specialists in the loop)"));
+  p.innerHTML+=(d.pipeline||[]).map((s,i)=>`<span class='chip'>${i+1}. ${esc(s)}</span>`).join("");
+  c.appendChild(p);
+  const a=el("div","card");a.appendChild(el("h3",null,"Recruiting agents used"));
+  a.innerHTML+=((d.recruiting_specialists||[]).length?d.recruiting_specialists:["(defs land as OSS package is built)"]).map(x=>`<span class='chip'>${esc(x)}</span>`).join("");
+  c.appendChild(a);
+  const s=el("div","card");s.appendChild(el("h3",null,"Recruiting skills used"));
+  s.innerHTML+=(d.recruiting_skills||[]).map(x=>`<span class='chip'>${esc(x)}</span>`).join("");
+  c.appendChild(s);
+  c.appendChild(note(d.note||""));
+}
+
+const R={resume:renderResume,goals:renderGoals,jobs:renderJobs,networking:renderNetworking,applications:renderApplications,system:renderSystem};
+async function load(){
+  try{
+    const r=await fetch("/api/all");DATA=await r.json();
+    $("#sub").textContent="live · "+new Date().toLocaleString();
+    const KEY={resume:"resumes"};
+    for(const[id]of TABS){try{R[id](DATA[KEY[id]||id]||{});}catch(e){$("#t-"+id).innerHTML="<div class='empty'>render error: "+esc(e.message)+"</div>";}}
+  }catch(e){$("#sub").textContent="error loading data: "+e.message;}
+}
+nav();load();
+</script>
+</body>
+</html>

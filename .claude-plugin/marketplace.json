@@ -1,0 +1,14 @@
+{
+  "name": "recruit-copilot",
+  "owner": {
+    "name": "JD Davenport"
+  },
+  "plugins": [
+    {
+      "name": "recruit",
+      "source": "./",
+      "description": "Quality-first job-search copilot: scout + score roles, tailor + grade resumes with a calibrated 3-persona panel, track everything in a local dashboard. Fill-and-STOP (you click Submit)."
+    }
+  ],
+  "description": "Quality-first job-search copilot for Claude Code: scout and score roles, tailor and grade resumes with a calibrated 3-persona panel, track everything locally. Fill-and-STOP, you click Submit."
+}

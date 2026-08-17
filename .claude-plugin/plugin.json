@@ -1,0 +1,9 @@
+{
+  "name": "recruit",
+  "version": "0.1.0",
+  "description": "A quality-first job-search copilot for Claude Code: ingest and score target roles, tailor an ATS-safe resume, grade it with a calibrated 3-persona panel, and track everything in a local dashboard. Fills applications up to Submit and stops. You click Submit.",
+  "author": { "name": "JD Davenport" },
+  "homepage": "https://github.com/jddavenportOpen/recruit-copilot",
+  "license": "MIT",
+  "keywords": ["job-search", "resume", "ats", "recruiting", "claude-code", "llm-as-judge"]
+}

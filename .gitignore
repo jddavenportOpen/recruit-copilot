@@ -1,0 +1,6 @@
+__pycache__/
+*.pyc
+.DS_Store
+workspace/resumes/*.pdf
+workspace/state/*.json
+!workspace/master-experience.example.json

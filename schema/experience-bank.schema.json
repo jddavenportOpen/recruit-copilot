@@ -1,0 +1,64 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/jddavenportOpen/recruit-copilot/schema/experience-bank.schema.json",
+  "title": "Recruit Copilot experience bank",
+  "description": "The single source of truth for every generated resume. Every claim here must be true and confirmable by the candidate.",
+  "type": "object",
+  "required": ["jobs"],
+  "additionalProperties": true,
+  "properties": {
+    "jobs": {
+      "type": "array",
+      "description": "Roles, most recent first.",
+      "items": {
+        "type": "object",
+        "required": ["id", "title", "company", "bullets"],
+        "additionalProperties": true,
+        "properties": {
+          "id": { "type": "string", "description": "Short unique id for this job." },
+          "title": { "type": "string" },
+          "company": { "type": "string" },
+          "location": { "type": "string" },
+          "dates": { "type": "string", "description": "Human-readable date range, for example '2023 to Present'." },
+          "bullets": {
+            "type": "object",
+            "description": "Map from a short bullet id to the bullet text. Keep a deeper pool than any one resume uses.",
+            "additionalProperties": { "type": "string" }
+          },
+          "required_bullets": {
+            "type": "array",
+            "description": "Bullet ids that must always appear for this job.",
+            "items": { "type": "string" }
+          }
+        }
+      }
+    },
+    "summaries": {
+      "type": "object",
+      "description": "Map from an archetype name to a summary paragraph.",
+      "additionalProperties": { "type": "string" }
+    },
+    "skills_pool": {
+      "type": "object",
+      "description": "Map from a category name to a comma-separated skills string.",
+      "additionalProperties": { "type": "string" }
+    },
+    "education": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": true,
+        "properties": {
+          "school": { "type": "string" },
+          "degree": { "type": "string" },
+          "dates": { "type": "string" }
+        }
+      }
+    },
+    "pinned_facts": {
+      "type": "array",
+      "description": "Short statements that must never be contradicted (legal name, work authorization, a consistently-presented title).",
+      "items": { "type": "string" }
+    }
+  }
+}
