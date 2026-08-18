@@ -51,6 +51,11 @@
   .wrap{overflow-x:auto}
   .empty{color:var(--muted);padding:14px 0}
   code{background:var(--panel2);padding:1px 6px;border-radius:5px;font-size:12px}
+  .btn{background:var(--accent);color:#fff;border:none;border-radius:8px;padding:7px 16px;font-size:13px;font-weight:600;cursor:pointer}
+  .btn:hover{filter:brightness(1.08)}
+  .btn.sm{padding:4px 12px;font-size:12px}
+  .btn.ghost{background:transparent;color:var(--accent);border:1px solid var(--line)}
+  a.view{color:var(--accent);text-decoration:none;font-size:12.5px}
 </style>
 </head>
 <body>
@@ -60,6 +65,7 @@
 </header>
 <nav id="nav"></nav>
 <main>
+  <div class="tab" id="t-review"></div>
   <div class="tab" id="t-resume"></div>
   <div class="tab" id="t-goals"></div>
   <div class="tab" id="t-jobs"></div>
@@ -68,14 +74,14 @@
   <div class="tab" id="t-system"></div>
 </main>
 <script>
-const TABS=[["resume","Resume"],["goals","Goals"],["jobs","Jobs"],["networking","Networking"],["applications","Applications"],["system","System Health"]];
+const TABS=[["review","Review & Approve"],["resume","Resume"],["goals","Goals"],["jobs","Jobs"],["networking","Networking"],["applications","Applications"],["system","System Health"]];
 const $=s=>document.querySelector(s);
 const el=(t,c,h)=>{const e=document.createElement(t);if(c)e.className=c;if(h!=null)e.innerHTML=h;return e;};
 function scoreClass(n){return n==null?"m":n>=90?"g":n>=80?"w":n>=70?"":"b";}
 function esc(s){return (s==null?"":String(s)).replace(/[&<>]/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[m]));}
 
 let DATA={};
-function nav(){const n=$("#nav");TABS.forEach(([id,label],i)=>{const b=el("button",i===0?"active":"",label);b.onclick=()=>{document.querySelectorAll("nav button").forEach(x=>x.classList.remove("active"));b.classList.add("active");document.querySelectorAll(".tab").forEach(x=>x.classList.remove("active"));$("#t-"+id).classList.add("active");};n.appendChild(b);});$("#t-resume").classList.add("active");}
+function nav(){const n=$("#nav");TABS.forEach(([id,label],i)=>{const b=el("button",i===0?"active":"",label);b.onclick=()=>{document.querySelectorAll("nav button").forEach(x=>x.classList.remove("active"));b.classList.add("active");document.querySelectorAll(".tab").forEach(x=>x.classList.remove("active"));$("#t-"+id).classList.add("active");};n.appendChild(b);});$("#t-"+TABS[0][0]).classList.add("active");}
 
 function kpis(items){const g=el("div","grid kpis");items.forEach(([n,l,cls])=>{const k=el("div","kpi");k.appendChild(el("div","n "+(cls||""),n));k.appendChild(el("div","l",l));g.appendChild(k);});return g;}
 function note(t){return el("div","note",esc(t));}
@@ -87,9 +93,9 @@ function renderResume(d){const c=$("#t-resume");c.innerHTML="";
   mc.innerHTML+=(m.job_titles||[]).map(t=>"<span class='chip'>"+esc(t)+"</span>").join("");
   c.appendChild(mc);
   const list=el("div","grid cards");(d.resumes||[]).forEach(r=>{const card=el("div","card");
-    let s=r.panel_avg!=null?`<span class='score ${scoreClass(r.panel_avg)}'>${r.panel_avg}</span> <span class='mut'>/100 · ${r.interview_votes??"-"}/3 votes</span>`:`<span class='mut'>ungraded</span>`;
+    let s=r.panel_avg!=null?`<span class='score ${scoreClass(r.panel_avg)}'>${r.panel_avg}</span> <span class='mut'>/100 · ${r.interview_votes??"–"}/3 votes</span>`:`<span class='mut'>ungraded</span>`;
     card.innerHTML=`<div class='title'>${esc(r.title)}</div><div class='mut'>${esc((r.updated||"").slice(0,10))} · ${r.kb}kb</div><div style='margin-top:8px'>${s}</div>`;
-    if(r.personas){card.innerHTML+=`<div class='mut' style='margin-top:6px'>HM ${r.personas.hiring_manager??"-"} · Rec ${r.personas.recruiter??"-"} · AISys ${r.personas.ai_systems_rep??"-"}</div>`;}
+    if(r.personas){card.innerHTML+=`<div class='mut' style='margin-top:6px'>HM ${r.personas.hiring_manager??"–"} · Rec ${r.personas.recruiter??"–"} · AISys ${r.personas.ai_systems_rep??"–"}</div>`;}
     if(r.keyword_match_pct!=null)card.innerHTML+=`<span class='chip'>kw ${r.keyword_match_pct}%</span>`;
     if(r.ai_risk)card.innerHTML+=`<span class='chip'>AI-risk ${esc(r.ai_risk)}</span>`;
     list.appendChild(card);});
@@ -119,7 +125,7 @@ function renderJobs(d){const c=$("#t-jobs");c.innerHTML="";
   if(!j.length){c.appendChild(note(d.note||"No jobs yet. Run job_scout.py."));return;}
   const wrap=el("div","wrap card");let h="<table><tr><th>Match</th><th>Company</th><th>Role</th><th>Location</th><th>Comp</th></tr>";
   j.forEach(x=>{const role=x.url?`<a href='${esc(x.url)}' target='_blank' style='color:var(--accent);text-decoration:none'>${esc(x.title)}</a>`:esc(x.title);
-    h+=`<tr><td class='score ${scoreClass(x.match)}'>${x.match??"-"}</td><td>${esc(x.company)}</td><td>${role}</td><td class='mut'>${esc(x.location||"")}</td><td>${esc(x.comp||"-")}</td></tr>`;});
+    h+=`<tr><td class='score ${scoreClass(x.match)}'>${x.match??"–"}</td><td>${esc(x.company)}</td><td>${role}</td><td class='mut'>${esc(x.location||"")}</td><td>${esc(x.comp||"–")}</td></tr>`;});
   wrap.innerHTML=h+"</table>";c.appendChild(wrap);
 }
 
@@ -130,7 +136,7 @@ function renderNetworking(d){const c=$("#t-networking");c.innerHTML="";
   c.appendChild(gate);
   if(!(d.contacts||[]).length){c.appendChild(note(d.note||""));return;}
   const wrap=el("div","wrap card");let h="<table><tr><th>Contact</th><th>Company</th><th>Last messaged</th><th>Cadence</th><th>Meeting</th></tr>";
-  (d.contacts||[]).forEach(x=>h+=`<tr><td>${esc(x.name)}</td><td>${esc(x.company||"")}</td><td>${esc(x.last_messaged||"-")}</td><td>${esc(x.cadence||"")}</td><td>${esc(x.meeting||"")}</td></tr>`);
+  (d.contacts||[]).forEach(x=>h+=`<tr><td>${esc(x.name)}</td><td>${esc(x.company||"")}</td><td>${esc(x.last_messaged||"–")}</td><td>${esc(x.cadence||"")}</td><td>${esc(x.meeting||"")}</td></tr>`);
   wrap.innerHTML=h+"</table>";c.appendChild(wrap);
 }
 
@@ -138,12 +144,12 @@ function renderApplications(d){const c=$("#t-applications");c.innerHTML="";
   c.appendChild(kpis([
     [d.officially_submitted||0,"submitted (you click)"],
     [d.verified_applied||0,"verified applied",(d.verified_applied?"g":"m")],
-    [d.avg_score??"-","avg resume score",scoreClass(d.avg_score)],
+    [d.avg_score??"–","avg resume score",scoreClass(d.avg_score)],
     [d.total_batches||0,"copilot runs"]]));
   c.appendChild(note(d.note||""));
   if(!(d.recent||[]).length){c.appendChild(el("div","empty","No application records yet. Run the copilot on a job URL and it appears here."));return;}
   const wrap=el("div","wrap card");let h="<table><tr><th>When</th><th>Company</th><th>Role</th><th>Score</th><th>Status</th><th>Verified</th></tr>";
-  (d.recent||[]).forEach(x=>h+=`<tr><td class='mut'>${esc((x.ts||"").slice(0,10))}</td><td>${esc(x.company)}</td><td>${esc(x.title)}</td><td class='${scoreClass(x.panel_avg)}'>${x.panel_avg??"-"}</td><td>${esc(x.status)}</td><td>${x.verified_applied?"<span class='pill on'>yes</span>":"<span class='mut'->-</span>"}</td></tr>`);
+  (d.recent||[]).forEach(x=>h+=`<tr><td class='mut'>${esc((x.ts||"").slice(0,10))}</td><td>${esc(x.company)}</td><td>${esc(x.title)}</td><td class='${scoreClass(x.panel_avg)}'>${x.panel_avg??"–"}</td><td>${esc(x.status)}</td><td>${x.verified_applied?"<span class='pill on'>yes</span>":"<span class='mut'>–</span>"}</td></tr>`);
   wrap.innerHTML=h+"</table>";c.appendChild(wrap);
 }
 
@@ -161,7 +167,35 @@ function renderSystem(d){const c=$("#t-system");c.innerHTML="";
   c.appendChild(note(d.note||""));
 }
 
-const R={resume:renderResume,goals:renderGoals,jobs:renderJobs,networking:renderNetworking,applications:renderApplications,system:renderSystem};
+async function post(url,body){await fetch(url,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body||{})});}
+function renderReview(d){const c=$("#t-review");c.innerHTML="";
+  const cos=d.companies||[], t=d.totals||{};
+  c.appendChild(kpis([[t.jobs||0,"jobs prepared"],[t.scored||0,"resumes graded"],[t.approved||0,"approved",t.approved?"g":"m"],[cos.length,"companies"]]));
+  if(d.note)c.appendChild(note(d.note));
+  const bar=el("div","card");bar.style.cssText="display:flex;justify-content:space-between;align-items:center";
+  bar.appendChild(el("div","title","Review each tailored resume, then approve"));
+  const allbtn=el("button","btn","✓ Approve all graded");
+  allbtn.onclick=async()=>{allbtn.textContent="…";await post("/api/approve-all",{approved:true});load();};
+  bar.appendChild(allbtn);c.appendChild(bar);
+  if(!cos.length){c.appendChild(el("div","empty","No review batch yet. It builds as resumes finish generating (refresh in a bit)."));return;}
+  cos.forEach(co=>{
+    const sec=el("div","card");
+    sec.appendChild(el("h3",null,`${esc(co.name)} <span class='mut'>${co.ready}/${co.total} ready · avg ${co.avg??'-'} · ${co.approved} approved</span>`));
+    (co.jobs||[]).forEach(j=>{
+      const scored=(j.panel_avg||0)>0;
+      const row=el("div","row");
+      const view=j.pdf?`<a class='view' href='/resume/${encodeURIComponent(j.pdf)}' target='_blank'>View resume ↗</a>`:`<span class='mut'>${esc(j.status||'pending')}${j.status==='generating'?' …':''}</span>`;
+      const fqa=j.format_qa_passed===true?"<span class='chip'>layout ✓</span>":(j.format_qa_passed===false?"<span class='chip'>layout ✗</span>":"");
+      const score=scored?`<span class='score ${scoreClass(j.panel_avg)}'>${j.panel_avg}</span> <span class='mut'>${j.interview_votes??''}/3 · ${(j.overall_pass?'pass':'below '+(j.threshold||''))}</span>`:(j.status&&j.status.startsWith('error')?`<span class='b'>error</span>`:`<span class='mut'>grading…</span>`);
+      const appr=j.approved?"<span class='pill on'>approved</span>":(scored?`<button class='btn sm apprbtn' data-pdf='${esc(j.pdf)}'>Approve</button>`:"");
+      row.innerHTML=`<div style='flex:1'><span class='chip'>${j.match??''}</span> <a href='${esc(j.url||'#')}' target='_blank' class='title' style='color:inherit'>${esc(j.title)}</a> <span class='mut'>${esc(j.comp||'')}</span> ${fqa}<div style='margin-top:3px'>${view}</div></div><div style='text-align:right;min-width:170px'>${score}<div style='margin-top:5px'>${appr}</div></div>`;
+      sec.appendChild(row);
+    });
+    c.appendChild(sec);
+  });
+  c.querySelectorAll(".apprbtn").forEach(b=>b.onclick=async()=>{b.textContent="…";await post("/api/approve",{pdf:b.dataset.pdf,approved:true});load();});
+}
+const R={review:renderReview,resume:renderResume,goals:renderGoals,jobs:renderJobs,networking:renderNetworking,applications:renderApplications,system:renderSystem};
 async function load(){
   try{
     const r=await fetch("/api/all");DATA=await r.json();

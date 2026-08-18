@@ -1,22 +1,13 @@
 #!/usr/bin/env python3
-"""job_scout - ingest roles from public ATS JSON endpoints, score each against
-your criteria, and write workspace/state/jobs.json so the Jobs tab goes live.
+"""job_scout - ingest roles from public ATS JSON endpoints (Greenhouse boards-api +
+Ashby posting-api, both public, no auth, ToS-clean), score them, select the top N
+per company, and capture the JD text for the selected roles. Writes
+state/jobs.json (Jobs tab) + state/review-candidates.json (review flow).
 
-Source: Greenhouse boards-api (public, no auth, ToS-clean):
-  https://boards-api.greenhouse.io/v1/boards/{token}/jobs
-
-Run:  python3 job_scout.py            (uses workspace/state/target_companies.json)
-      python3 job_scout.py --min 60   (raise the match threshold)
-
-Edit workspace/state/target_companies.json to set your target boards and the
-title keywords that define a match for YOUR search. Stdlib only.
+Edit workspace/state/target_companies.json to set YOUR target boards (each row is
+{name, ats: greenhouse|ashby, token}) and criteria. Run: python3 job_scout.py
 """
-import argparse
-import html
-import json
-import os
-import re
-import urllib.request
+import argparse, html, json, os, re, urllib.request
 from datetime import datetime, timezone
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -24,130 +15,151 @@ PLUGIN_ROOT = os.path.dirname(HERE)
 HOME = os.environ.get("RECRUIT_HOME", os.path.join(PLUGIN_ROOT, "workspace"))
 STATE = os.path.join(HOME, "state")
 CFG = os.path.join(STATE, "target_companies.json")
-OUT = os.path.join(STATE, "jobs.json")
+JOBS_OUT = os.path.join(STATE, "jobs.json")
+REVIEW_OUT = os.path.join(STATE, "review-candidates.json")
 
-DEFAULT_CFG = {
-    "criteria": {"comp_min": 200000, "target": "your target roles", "min_match": 55},
-    "strong_titles": ["solutions architect", "solutions engineer", "forward deployed",
-                      "applied ai", "ai architect", "sales engineer", "field engineer",
-                      "customer engineer", "technical account manager"],
-    "medium_titles": ["ai engineer", "machine learning engineer", "member of technical staff",
-                     "developer relations", "product engineer", "platform engineer"],
-    "companies": [
-        {"name": "Anthropic", "token": "anthropic"},
-        {"name": "Databricks", "token": "databricks"},
-        {"name": "Scale AI", "token": "scaleai"},
-        {"name": "xAI", "token": "xai"},
-        {"name": "Together AI", "token": "togetherai"},
-    ],
-}
+DEFAULT_COMPANIES = [
+    {"name": "Anthropic", "ats": "greenhouse", "token": "anthropic"},
+    {"name": "OpenAI", "ats": "ashby", "token": "openai"},
+    {"name": "Databricks", "ats": "greenhouse", "token": "databricks"},
+    {"name": "Scale AI", "ats": "greenhouse", "token": "scaleai"},
+    {"name": "xAI", "ats": "greenhouse", "token": "xai"},
+    {"name": "Cohere", "ats": "ashby", "token": "cohere"},
+    {"name": "Sierra", "ats": "ashby", "token": "sierra"},
+]
+CRITERIA = {"comp_min": 350000, "target": "Applied AI Architect / Forward-Deployed Engineer / Solutions Architect", "min_match": 55}
+STRONG = ("applied ai", "forward deployed", "forward-deployed", "solutions architect", "solutions engineer",
+          "ai architect", "technical account manager", "field engineer", "deployment engineer",
+          "customer engineer", "developer experience", "member of technical staff", "solutions consultant")
+MEDIUM = ("ai engineer", "machine learning engineer", "ml engineer", "sales engineer", "developer relations",
+          "developer advocate", "product engineer", "platform engineer", "technical lead", "gtm engineer",
+          "prototype", "customer success engineer")
 SENIOR = ("senior", "staff", "principal", "lead", "head of", "director", "architect")
-JUNIOR = ("intern", "new grad", "early career", "apprentice", "associate", "university")
+JUNIOR = ("intern", "new grad", "early career", "apprentice", "university", "phd")
+_PAY_RE = re.compile(r"\$\s?(\d{3},\d{3})(?:\s*(?:-|to|—|–)\s*\$?\s?(\d{3},\d{3}))?")
 
 
-def _get(url, timeout=25):
+def _get(url, timeout=30):
     req = urllib.request.Request(url, headers={"User-Agent": "recruit-copilot-jobscout/1.0"})
     with urllib.request.urlopen(req, timeout=timeout) as r:
         return json.loads(r.read().decode())
 
 
-def score_job(title, location, strong, medium):
+def score_job(title, location):
     t = (title or "").lower()
-    if any(k in t for k in strong):
-        score = 75
-    elif any(k in t for k in medium):
-        score = 55
+    if any(k in t for k in STRONG):
+        s = 78
+    elif any(k in t for k in MEDIUM):
+        s = 58
     elif "engineer" in t or "architect" in t or "solutions" in t:
-        score = 35
+        s = 38
     else:
-        score = 10
+        s = 12
     if any(k in t for k in SENIOR):
-        score += 12
+        s += 12
     if any(k in t for k in JUNIOR):
-        score -= 28
-    if any(k in t for k in ("ai", "ml", "llm", "genai", "generative")):
-        score += 5
+        s -= 30
+    if any(k in t for k in ("ai", "ml", "llm", "genai", "generative", "claude", "gpt")):
+        s += 5
     loc = (location or "").lower()
-    if any(k in loc for k in ("remote", "united states", "san francisco", "new york", "seattle", "us")):
-        score += 3
-    return max(0, min(100, score))
+    if any(k in loc for k in ("remote", "united states", "san francisco", "new york", "seattle", "us", "bay area")):
+        s += 3
+    return max(0, min(100, s))
 
 
-_PAY_RE = re.compile(r"\$\s?(\d{3},\d{3})(?:\s*(?:-|to|—|–)\s*\$?\s?(\d{3},\d{3}))?")
-
-
-def fetch_comp(token, job_id):
-    try:
-        d = _get(f"https://boards-api.greenhouse.io/v1/boards/{token}/jobs/{job_id}?content=true")
-        content = html.unescape(d.get("content", ""))
-        for m in _PAY_RE.finditer(content):
-            lo, hi = m.group(1), m.group(2)
-            if int(lo.replace(",", "")) >= 100000:
-                return f"${lo}" + (f" - ${hi}" if hi else "")
-    except Exception:
-        return None
+def _comp_from_text(text):
+    for m in _PAY_RE.finditer(text or ""):
+        lo, hi = m.group(1), m.group(2)
+        if int(lo.replace(",", "")) >= 100000:
+            return f"${lo}" + (f" - ${hi}" if hi else "")
     return None
 
 
-def load_cfg():
+# ---- ATS adapters: normalize to {title, location, url, id, raw_jd_fetch()} ----
+def fetch_greenhouse(token):
+    data = _get(f"https://boards-api.greenhouse.io/v1/boards/{token}/jobs")
+    out = []
+    for j in data.get("jobs", []):
+        out.append({"title": j.get("title", ""), "location": (j.get("location") or {}).get("name", ""),
+                    "url": j.get("absolute_url", ""), "id": j.get("id"), "ats": "greenhouse", "token": token,
+                    "jd_text": None})
+    return out
+
+
+def fetch_ashby(org):
+    data = _get(f"https://api.ashbyhq.com/posting-api/job-board/{org}")
+    out = []
+    for j in data.get("jobs", []):
+        if j.get("isListed") is False:
+            continue
+        out.append({"title": j.get("title", ""), "location": j.get("location", ""),
+                    "url": j.get("jobUrl", ""), "id": j.get("id"), "ats": "ashby", "token": org,
+                    "jd_text": j.get("descriptionPlain") or None})  # Ashby ships the JD inline
+    return out
+
+
+def hydrate_jd(job):
+    """Ensure job['jd_text'] is populated (Ashby already has it; Greenhouse fetch content)."""
+    if job.get("jd_text"):
+        return job
+    if job["ats"] == "greenhouse":
+        try:
+            d = _get(f"https://boards-api.greenhouse.io/v1/boards/{job['token']}/jobs/{job['id']}?content=true")
+            job["jd_text"] = html.unescape(re.sub(r"<[^>]+>", " ", d.get("content", "")))
+        except Exception:
+            job["jd_text"] = ""
+    return job
+
+
+def scout(per_company=5, min_match=None):
+    companies = DEFAULT_COMPANIES
     if os.path.exists(CFG):
         try:
-            c = json.load(open(CFG))
-            for k, v in DEFAULT_CFG.items():
-                c.setdefault(k, v)
-            return c
+            companies = json.load(open(CFG)).get("companies", DEFAULT_COMPANIES)
         except Exception:
             pass
-    os.makedirs(STATE, exist_ok=True)
-    json.dump(DEFAULT_CFG, open(CFG, "w"), indent=2)
-    return DEFAULT_CFG
-
-
-def scout(min_match=None, enrich_top=14):
-    cfg = load_cfg()
-    strong = [s.lower() for s in cfg.get("strong_titles", [])]
-    medium = [s.lower() for s in cfg.get("medium_titles", [])]
-    min_match = min_match if min_match is not None else cfg.get("criteria", {}).get("min_match", 55)
-    all_jobs, sources, counts = [], [], {}
-    for c in cfg.get("companies", []):
-        token = c.get("token")
+    min_match = min_match if min_match is not None else CRITERIA["min_match"]
+    flat, review, sources = [], [], []
+    for c in companies:
         try:
-            data = _get(f"https://boards-api.greenhouse.io/v1/boards/{token}/jobs")
+            jobs = fetch_ashby(c["token"]) if c["ats"] == "ashby" else fetch_greenhouse(c["token"])
         except Exception as e:
-            sources.append({"company": c["name"], "token": token, "ok": False, "error": str(e)})
+            sources.append({"company": c["name"], "ok": False, "error": str(e)})
             continue
-        jobs = data.get("jobs", [])
-        sources.append({"company": c["name"], "token": token, "ok": True, "total": len(jobs)})
-        kept = 0
         for j in jobs:
-            loc = (j.get("location") or {}).get("name", "")
-            m = score_job(j.get("title", ""), loc, strong, medium)
-            if m < min_match:
-                continue
-            all_jobs.append({"company": c["name"], "token": token, "id": j.get("id"),
-                             "title": j.get("title", ""), "location": loc, "match": m,
-                             "url": j.get("absolute_url", ""), "updated": (j.get("updated_at") or "")[:10], "comp": None})
-            kept += 1
-        counts[c["name"]] = {"total": len(jobs), "matched": kept}
-    all_jobs.sort(key=lambda x: x["match"], reverse=True)
-    for job in all_jobs[:enrich_top]:
-        job["comp"] = fetch_comp(job["token"], job["id"])
-    payload = {"generated": datetime.now(timezone.utc).isoformat(), "criteria": cfg.get("criteria", {}),
-               "sources": sources, "counts": counts, "total_matched": len(all_jobs),
-               "shown": min(60, len(all_jobs)), "jobs": all_jobs[:60],
-               "note": f"{len(all_jobs)} roles matched across {len([s for s in sources if s.get('ok')])} boards "
-                       f"(threshold {min_match}); top {min(60, len(all_jobs))} shown. Public Greenhouse API, ToS-clean."}
-    os.makedirs(STATE, exist_ok=True)
-    json.dump(payload, open(OUT, "w"), indent=2, default=str)
-    return payload
+            j["company"] = c["name"]
+            j["match"] = score_job(j["title"], j["location"])
+        jobs.sort(key=lambda x: x["match"], reverse=True)
+        kept = [j for j in jobs if j["match"] >= min_match]
+        sources.append({"company": c["name"], "ok": True, "total": len(jobs), "matched": len(kept)})
+        flat.extend(kept)
+        # top-N per company for the review flow -> hydrate JD + comp
+        top = kept[:per_company]
+        for j in top:
+            hydrate_jd(j)
+            j["comp"] = _comp_from_text(j.get("jd_text", ""))
+        review.append({"name": c["name"], "ats": c["ats"], "token": c["token"],
+                       "jobs": [{k: j[k] for k in ("title", "location", "url", "id", "ats", "token",
+                                                   "match", "comp", "jd_text")} for j in top]})
+    flat.sort(key=lambda x: x["match"], reverse=True)
+    now = datetime.now(timezone.utc).isoformat()
+    json.dump({"generated": now, "criteria": CRITERIA,
+               "sources": sources, "total_matched": len(flat), "shown": min(60, len(flat)),
+               "jobs": [{k: j.get(k) for k in ("company", "title", "location", "match", "comp", "url")} for j in flat[:60]],
+               "note": f"{len(flat)} roles matched across {len([s for s in sources if s.get('ok')])} boards (Greenhouse + Ashby, ToS-clean)."},
+              open(JOBS_OUT, "w"), indent=2, default=str)
+    json.dump({"generated": now, "per_company": per_company, "companies": review},
+              open(REVIEW_OUT, "w"), indent=2, default=str)
+    return {"sources": sources, "review": review, "flat": len(flat)}
 
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
+    ap.add_argument("--per-company", type=int, default=5)
     ap.add_argument("--min", type=int, default=None)
-    p = scout(ap.parse_args().min)
-    ok = [s for s in p["sources"] if s.get("ok")]
-    print(f"scouted {len(ok)} boards -> {p['total_matched']} matched, top {len(p['jobs'])} shown")
-    for j in p["jobs"][:10]:
-        print(f"  {j['match']:>3}  {j['company']:<12} {j['title'][:50]:<50} {j['comp'] or ''}")
-    print(f"wrote {OUT}")
+    a = ap.parse_args()
+    r = scout(a.per_company, a.min)
+    for co in r["review"]:
+        print(f"{co['name']:<12} {len(co['jobs'])} selected: " +
+              ", ".join(f"{j['title'][:28]}({j['match']})" for j in co["jobs"][:3]) + " ...")
+    print(f"wrote {JOBS_OUT} + {REVIEW_OUT}")

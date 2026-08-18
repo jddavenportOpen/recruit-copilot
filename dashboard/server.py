@@ -152,8 +152,44 @@ def read_system():
             "note": "Specialists = the agents + skills this plugin ships. Claude in your session is the LLM runtime (no API key)."}
 
 
+# ---- Review flow (companies x jobs, each with its resume + score + approve) ----
+def read_review():
+    d = _load_json(os.path.join(STATE, "review.json"), None)
+    if d is None:
+        return {"companies": [], "generated": None,
+                "note": "No review batch yet. Scout roles, then generate + grade a resume per role, then approve."}
+    order = d.get("companies_order") or []
+    by_co = {}
+    for r in d.get("results", []):
+        by_co.setdefault(r["company"], []).append(r)
+    companies = []
+    for name in order or list(by_co.keys()):
+        jobs = by_co.get(name, [])
+        ready = [j for j in jobs if (j.get("panel_avg") or 0) > 0]
+        companies.append({"name": name, "jobs": jobs, "ready": len(ready), "total": len(jobs),
+                          "approved": sum(1 for j in jobs if j.get("approved")),
+                          "avg": round(sum(j["panel_avg"] for j in ready) / len(ready), 1) if ready else None})
+    results = d.get("results", [])
+    return {"companies": companies, "generated": d.get("generated"),
+            "totals": {"jobs": len(results), "scored": sum(1 for r in results if (r.get("panel_avg") or 0) > 0),
+                       "approved": sum(1 for r in results if r.get("approved"))},
+            "note": "The copilot fills applications and STOPS at Submit. Approving marks a resume ready; you click Submit."}
+
+
+def _mutate_review(fn):
+    p = os.path.join(STATE, "review.json")
+    d = _load_json(p, None)
+    if not d:
+        return {"ok": False}
+    n = fn(d.get("results", []))
+    with open(p, "w") as fh:
+        json.dump(d, fh, indent=2, default=str)
+    return {"ok": True, "updated": n}
+
+
 ROUTES = {"/api/goals": read_goals, "/api/resumes": read_resumes, "/api/applications": read_applications,
-          "/api/jobs": read_jobs, "/api/networking": read_networking, "/api/system": read_system}
+          "/api/jobs": read_jobs, "/api/networking": read_networking, "/api/system": read_system,
+          "/api/review": read_review}
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -176,10 +212,40 @@ class Handler(BaseHTTPRequestHandler):
                     return self._send(200, fh.read(), "text/html; charset=utf-8")
             except Exception as e:
                 return self._send(500, f"index.html missing: {e}", "text/plain")
+        if path.startswith("/resume/"):
+            name = os.path.basename(path[len("/resume/"):])
+            fp = os.path.join(RESUME_DIR, name)
+            if name.endswith(".pdf") and os.path.isfile(fp):
+                with open(fp, "rb") as fh:
+                    data = fh.read()
+                self.send_response(200)
+                self.send_header("Content-Type", "application/pdf")
+                self.send_header("Content-Length", str(len(data)))
+                self.end_headers()
+                self.wfile.write(data)
+                return
+            return self._send(404, json.dumps({"error": "resume not found"}))
         if path == "/api/all":
             return self._send(200, json.dumps({k.split("/")[-1]: fn() for k, fn in ROUTES.items()}, default=str))
         if path in ROUTES:
             return self._send(200, json.dumps(ROUTES[path](), default=str))
+        return self._send(404, json.dumps({"error": "not found"}))
+
+    def do_POST(self):
+        path = self.path.split("?")[0]
+        try:
+            length = int(self.headers.get("Content-Length", 0))
+            body = json.loads(self.rfile.read(length) or "{}") if length else {}
+        except Exception:
+            body = {}
+        if path == "/api/approve":
+            pdf, appr = body.get("pdf"), body.get("approved", True)
+            return self._send(200, json.dumps(_mutate_review(
+                lambda rows: sum(1 for r in rows if r.get("pdf") == pdf and (r.update(approved=bool(appr)) or True)))))
+        if path == "/api/approve-all":
+            appr = body.get("approved", True)
+            return self._send(200, json.dumps(_mutate_review(
+                lambda rows: sum(1 for r in rows if (r.get("panel_avg") or 0) > 0 and (r.update(approved=bool(appr)) or True)))))
         return self._send(404, json.dumps({"error": "not found"}))
 
 
