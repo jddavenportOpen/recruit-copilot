@@ -56,6 +56,13 @@
   .btn.sm{padding:4px 12px;font-size:12px}
   .btn.ghost{background:transparent;color:var(--accent);border:1px solid var(--line)}
   a.view{color:var(--accent);text-decoration:none;font-size:12.5px}
+  @media (max-width:560px){
+    main{padding:16px 13px}header{padding:14px 16px}
+    .row{flex-direction:column;align-items:flex-start;gap:6px}
+    .row>div:last-child{text-align:left!important;min-width:0!important}
+    .kpi .n{font-size:22px}
+    nav{padding:8px 10px}nav button{padding:6px 10px}
+  }
 </style>
 </head>
 <body>
