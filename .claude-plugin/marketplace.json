@@ -7,8 +7,8 @@
     {
       "name": "recruit",
       "source": "./",
-      "description": "Quality-first job-search copilot: scout + score roles, tailor + grade resumes with a calibrated 3-persona panel, track everything in a local dashboard. Fill-and-STOP (you click Submit)."
+      "description": "A resume builder and job finder for Claude Code: merge the resumes you already have into one experience bank, score roles against goals you set, build a tailored ATS-safe resume per job, and prove a machine can still read it. It never applies for you."
     }
   ],
-  "description": "Quality-first job-search copilot for Claude Code: scout and score roles, tailor and grade resumes with a calibrated 3-persona panel, track everything locally. Fill-and-STOP, you click Submit."
+  "description": "A resume builder and job finder for Claude Code: merge the resumes you already have into one experience bank, score roles against goals you set, build a tailored ATS-safe resume per job, and prove a machine can still read it. It never applies for you."
 }

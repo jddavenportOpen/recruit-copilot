@@ -1,4 +1,14 @@
 {
+  "name": "Your Name",
+  "contact": {
+    "email": "you@example.com",
+    "phone": "555-123-4567",
+    "location": "City, ST",
+    "links": [
+      "linkedin.com/in/yourhandle",
+      "yoursite.example.com"
+    ]
+  },
   "_note": "Fictional template for Alex Rivera. Replace everything with your own real, confirmable history. See ONBOARDING.md.",
   "pinned_facts": [
     "Legal name: Alex Rivera",
@@ -17,7 +27,9 @@
         "cost": "Reduced cloud spend 18 percent by right-sizing the batch fleet and autoscaling on real demand signals.",
         "reliability": "Drove p99 error rate from 1.4 percent to 0.2 percent by adding backpressure and idempotent retries to the ingest queue."
       },
-      "required_bullets": ["latency"]
+      "required_bullets": [
+        "latency"
+      ]
     },
     {
       "id": "harbor-2019",
@@ -30,7 +42,9 @@
         "api": "Shipped the public REST API used by 30 partner integrations, with versioning and rate limiting from day one.",
         "oncall": "Owned on-call for the data platform and wrote the runbooks that cut mean time to recovery by 40 percent."
       },
-      "required_bullets": ["pipeline"]
+      "required_bullets": [
+        "pipeline"
+      ]
     }
   ],
   "summaries": {

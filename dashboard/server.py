@@ -57,14 +57,18 @@ def read_goals():
     d = _load_json(os.path.join(STATE, "goals.json"), None)
     if not d:
         return {"goals": [], "count": 0,
-                "note": "No goals yet. Add them to workspace/state/goals.json as a list of "
-                        "{kind, title, status, progress}."}
+                "note": "No goals yet. Run /recruit:goals, or add them to "
+                        "workspace/state/goals.json as a list of {goal, status, note}."}
     rows = d.get("goals", d) if isinstance(d, dict) else d
     out = []
     for g in rows or []:
         if isinstance(g, dict):
             out.append({"id": str(g.get("id", ""))[:8], "kind": g.get("kind", "goal"),
-                        "title": g.get("title", ""), "status": g.get("status", "active"),
+                        # accept either key: the goals command writes "goal", older
+                        # hand-written files use "title". Silently rendering a blank row
+                        # is worse than accepting both.
+                        "title": g.get("title") or g.get("goal", ""),
+                        "status": g.get("status", "active"),
                         "progress": g.get("progress"), "parent": g.get("parent", "")})
     return {"goals": out, "count": len(out)}
 
@@ -123,8 +127,9 @@ def read_applications():
 def read_jobs():
     d = _load_json(os.path.join(STATE, "jobs.json"), None)
     if d is None:
-        return {"jobs": [], "criteria": {"comp_min": 200000},
-                "note": "No jobs yet. Run:  python3 dashboard/job_scout.py  (edit workspace/state/target_companies.json first)."}
+        return {"jobs": [], "search": {},
+                "note": "No jobs yet. Set your goals with /recruit:goals, then run /recruit:scout "
+                        "(or python3 dashboard/job_scout.py)."}
     return d
 
 
@@ -148,7 +153,7 @@ def read_system():
             "recruiting_specialists": agents, "recruiting_skills": skills,
             "pipeline": ["job_scout (ingest+score)", "resume-generator skill (tailor)",
                          "resume-grader skill (3-persona panel, in-session)", "format gate (ATS parse-safety)",
-                         "browser fill (Greenhouse, fill-and-STOP)"],
+                         "resume-intake (build the experience bank)", "resume-builder (tailor + layout + round-trip gates)"],
             "note": "Specialists = the agents + skills this plugin ships. Claude in your session is the LLM runtime (no API key)."}
 
 

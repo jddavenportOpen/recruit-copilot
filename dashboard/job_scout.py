@@ -7,8 +7,11 @@ state/jobs.json (Jobs tab) + state/review-candidates.json (review flow).
 Edit workspace/state/target_companies.json to set YOUR target boards (each row is
 {name, ats: greenhouse|ashby, token}) and criteria. Run: python3 job_scout.py
 """
-import argparse, html, json, os, re, urllib.request
+import argparse, html, json, os, re, sys, urllib.request
 from datetime import datetime, timezone
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import search_goals
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 PLUGIN_ROOT = os.path.dirname(HERE)
@@ -27,15 +30,8 @@ DEFAULT_COMPANIES = [
     {"name": "Cohere", "ats": "ashby", "token": "cohere"},
     {"name": "Sierra", "ats": "ashby", "token": "sierra"},
 ]
-CRITERIA = {"comp_min": 350000, "target": "Applied AI Architect / Forward-Deployed Engineer / Solutions Architect", "min_match": 55}
-STRONG = ("applied ai", "forward deployed", "forward-deployed", "solutions architect", "solutions engineer",
-          "ai architect", "technical account manager", "field engineer", "deployment engineer",
-          "customer engineer", "developer experience", "member of technical staff", "solutions consultant")
-MEDIUM = ("ai engineer", "machine learning engineer", "ml engineer", "sales engineer", "developer relations",
-          "developer advocate", "product engineer", "platform engineer", "technical lead", "gtm engineer",
-          "prototype", "customer success engineer")
-SENIOR = ("senior", "staff", "principal", "lead", "head of", "director", "architect")
-JUNIOR = ("intern", "new grad", "early career", "apprentice", "university", "phd")
+# Scoring comes from YOUR goals file, not from constants in here. See
+# dashboard/search_goals.py for why that matters.
 _PAY_RE = re.compile(r"\$\s?(\d{3},\d{3})(?:\s*(?:-|to|—|–)\s*\$?\s?(\d{3},\d{3}))?")
 
 
@@ -45,26 +41,9 @@ def _get(url, timeout=30):
         return json.loads(r.read().decode())
 
 
-def score_job(title, location):
-    t = (title or "").lower()
-    if any(k in t for k in STRONG):
-        s = 78
-    elif any(k in t for k in MEDIUM):
-        s = 58
-    elif "engineer" in t or "architect" in t or "solutions" in t:
-        s = 38
-    else:
-        s = 12
-    if any(k in t for k in SENIOR):
-        s += 12
-    if any(k in t for k in JUNIOR):
-        s -= 30
-    if any(k in t for k in ("ai", "ml", "llm", "genai", "generative", "claude", "gpt")):
-        s += 5
-    loc = (location or "").lower()
-    if any(k in loc for k in ("remote", "united states", "san francisco", "new york", "seattle", "us", "bay area")):
-        s += 3
-    return max(0, min(100, s))
+def score_job(title, location, search, jd_text=""):
+    """Delegates to the goals-driven scorer so the Jobs tab reflects your search."""
+    return search_goals.score(title, location, search, jd_text)
 
 
 def _comp_from_text(text):
@@ -112,13 +91,23 @@ def hydrate_jd(job):
 
 
 def scout(per_company=5, min_match=None):
+    """Two passes, on purpose.
+
+    Titles and locations are free to score, but pay is only in the posting body,
+    which costs a fetch per role. So: score on title first, keep what survives,
+    fetch the body for the top few per company, then re-score those WITH the pay
+    so the comp floor you set actually moves the number instead of being decorative.
+    """
+    search = search_goals.load(STATE)          # raises NoGoals; the caller must stop
+
     companies = DEFAULT_COMPANIES
     if os.path.exists(CFG):
         try:
             companies = json.load(open(CFG)).get("companies", DEFAULT_COMPANIES)
         except Exception:
             pass
-    min_match = min_match if min_match is not None else CRITERIA["min_match"]
+    min_match = min_match if min_match is not None else int(search.get("min_match", 55))
+
     flat, review, sources = [], [], []
     for c in companies:
         try:
@@ -128,25 +117,29 @@ def scout(per_company=5, min_match=None):
             continue
         for j in jobs:
             j["company"] = c["name"]
-            j["match"] = score_job(j["title"], j["location"])
+            j["match"], j["why"] = score_job(j["title"], j["location"], search)
         jobs.sort(key=lambda x: x["match"], reverse=True)
         kept = [j for j in jobs if j["match"] >= min_match]
         sources.append({"company": c["name"], "ok": True, "total": len(jobs), "matched": len(kept)})
-        flat.extend(kept)
-        # top-N per company for the review flow -> hydrate JD + comp
+
         top = kept[:per_company]
         for j in top:
             hydrate_jd(j)
             j["comp"] = _comp_from_text(j.get("jd_text", ""))
+            # second pass: the posting body is here now, so pay can count
+            j["match"], j["why"] = score_job(j["title"], j["location"], search, j.get("jd_text", ""))
+        top.sort(key=lambda x: x["match"], reverse=True)
+        flat.extend(kept)
         review.append({"name": c["name"], "ats": c["ats"], "token": c["token"],
-                       "jobs": [{k: j[k] for k in ("title", "location", "url", "id", "ats", "token",
-                                                   "match", "comp", "jd_text")} for j in top]})
+                       "jobs": [{k: j.get(k) for k in ("title", "location", "url", "id", "ats", "token",
+                                                       "match", "why", "comp", "jd_text")} for j in top]})
+
     flat.sort(key=lambda x: x["match"], reverse=True)
     now = datetime.now(timezone.utc).isoformat()
-    json.dump({"generated": now, "criteria": CRITERIA,
+    json.dump({"generated": now, "search": search,
                "sources": sources, "total_matched": len(flat), "shown": min(60, len(flat)),
-               "jobs": [{k: j.get(k) for k in ("company", "title", "location", "match", "comp", "url")} for j in flat[:60]],
-               "note": f"{len(flat)} roles matched across {len([s for s in sources if s.get('ok')])} boards (Greenhouse + Ashby, ToS-clean)."},
+               "jobs": [{k: j.get(k) for k in ("company", "title", "location", "match", "why", "comp", "url")} for j in flat[:60]],
+               "note": f"{len(flat)} roles matched across {len([s for s in sources if s.get('ok')])} boards (Greenhouse + Ashby, ToS-clean), scored against your goals."},
               open(JOBS_OUT, "w"), indent=2, default=str)
     json.dump({"generated": now, "per_company": per_company, "companies": review},
               open(REVIEW_OUT, "w"), indent=2, default=str)
@@ -158,7 +151,11 @@ if __name__ == "__main__":
     ap.add_argument("--per-company", type=int, default=5)
     ap.add_argument("--min", type=int, default=None)
     a = ap.parse_args()
-    r = scout(a.per_company, a.min)
+    try:
+        r = scout(a.per_company, a.min)
+    except search_goals.NoGoals as e:
+        print(f"\n{e}\n", file=sys.stderr)
+        sys.exit(2)
     for co in r["review"]:
         print(f"{co['name']:<12} {len(co['jobs'])} selected: " +
               ", ".join(f"{j['title'][:28]}({j['match']})" for j in co["jobs"][:3]) + " ...")

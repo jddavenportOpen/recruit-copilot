@@ -127,7 +127,7 @@ function renderJobs(d){const c=$("#t-jobs");c.innerHTML="";
   const j=d.jobs||[];
   const boards=(d.sources||[]).filter(s=>s.ok).length;
   const withComp=j.filter(x=>x.comp).length;
-  c.appendChild(kpis([[d.total_matched??j.length,"matched roles"],[boards,"boards scouted"],["$"+(((d.criteria||{}).comp_min||350000)/1000)+"k+","comp target"],[withComp+"/"+j.length,"comp listed"]]));
+  c.appendChild(kpis([[d.total_matched??j.length,"matched roles"],[boards,"boards scouted"],[(((d.search||{}).comp_min)?"$"+((d.search.comp_min)/1000)+"k+":"any"),"comp floor"],[withComp+"/"+j.length,"comp listed"]]));
   if(d.generated)c.appendChild(el("div","mut","last scouted "+esc(d.generated.slice(0,16).replace("T"," "))+" · "+esc(d.note||"")));
   if(!j.length){c.appendChild(note(d.note||"No jobs yet. Run job_scout.py."));return;}
   const wrap=el("div","wrap card");let h="<table><tr><th>Match</th><th>Company</th><th>Role</th><th>Location</th><th>Comp</th></tr>";
