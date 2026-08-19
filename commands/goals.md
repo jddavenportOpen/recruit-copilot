@@ -3,7 +3,7 @@ description: Set the search goals that drive job matching and the dashboard.
 ---
 
 Set up or revise the user's search goals in
-`${RECRUIT_HOME:-$CLAUDE_PLUGIN_ROOT/workspace}/state/goals.json`.
+`${RECRUIT_HOME:-$HOME/.recruit-copilot}/state/goals.json`.
 
 This file does two jobs: the `goals` list is what the Goals tab tracks, and the
 `search` block is what every job in the Jobs tab is scored against. Getting it right

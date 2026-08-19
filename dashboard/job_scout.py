@@ -2,20 +2,25 @@
 """job_scout - ingest roles from public ATS JSON endpoints (Greenhouse boards-api +
 Ashby posting-api, both public, no auth, ToS-clean), score them, select the top N
 per company, and capture the JD text for the selected roles. Writes
-state/jobs.json (Jobs tab) + state/review-candidates.json (review flow).
+state/jobs.json, which the Jobs tab reads.
 
-Edit workspace/state/target_companies.json to set YOUR target boards (each row is
+Edit <workspace>/state/target_companies.json to set YOUR target boards (each row is
 {name, ats: greenhouse|ashby, token}) and criteria. Run: python3 job_scout.py
 """
 import argparse, html, json, os, re, sys, urllib.request
 from datetime import datetime, timezone
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import paths
 import search_goals
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 PLUGIN_ROOT = os.path.dirname(HERE)
-HOME = os.environ.get("RECRUIT_HOME", os.path.join(PLUGIN_ROOT, "workspace"))
+# One resolver for the whole product. This module used to default to the plugin's
+# own workspace/ while the dashboard defaulted to ~/.recruit-copilot, so a user who
+# never set RECRUIT_HOME had the scout write jobs into the versioned plugin
+# directory and the Jobs tab read an empty one three feet away.
+HOME = paths.home(create=True)
 STATE = os.path.join(HOME, "state")
 CFG = os.path.join(STATE, "target_companies.json")
 JOBS_OUT = os.path.join(STATE, "jobs.json")

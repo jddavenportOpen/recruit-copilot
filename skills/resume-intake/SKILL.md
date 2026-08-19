@@ -60,8 +60,10 @@ dates, a claim you could not verify). Notes are advisory.
 
 `schema/experience-bank.schema.json` is authoritative. The shape:
 
-- `contact` - name, email, phone, location, links. The email is required; a resume
-  nobody can reply to fails the round-trip gate downstream.
+- `name` - the name that goes at the top of the resume. Required.
+- `contact` - email, phone, location, links (or one `email | phone | location`
+  string). Required, and the email inside it is required: a resume nobody can reply
+  to fails the round-trip gate downstream.
 - `jobs[]` - `id`, `title`, `company`, `location`, `dates`, `bullets` (a map of short
   id to text, kept deeper than any one resume uses), `required_bullets` (ids that must
   always appear).

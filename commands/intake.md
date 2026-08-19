@@ -17,7 +17,11 @@ Steps:
    distinct accomplishment, never invent, and surface anything that looks inflated
    rather than passing it through.
 4. Ask a short set of specific questions about what is genuinely missing.
-5. Write `${RECRUIT_HOME:-$CLAUDE_PLUGIN_ROOT/workspace}/master-experience.json` and validate:
+5. Make sure the workspace exists, then write
+   `${RECRUIT_HOME:-$HOME/.recruit-copilot}/master-experience.json` and validate it:
+   ```bash
+   mkdir -p "${RECRUIT_HOME:-$HOME/.recruit-copilot}"/state "${RECRUIT_HOME:-$HOME/.recruit-copilot}"/resumes
+   ```
    ```bash
    python3 ${CLAUDE_PLUGIN_ROOT}/skills/resume-intake/scripts/validate_bank.py <path>
    ```

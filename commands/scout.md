@@ -21,7 +21,7 @@ Two files drive this, and they do different jobs:
 
 It pulls roles from the public Greenhouse boards-api and Ashby posting-api (both no-auth and
 ToS-clean), scores them, enriches the top matches with comp where the posting lists it, and writes
-`state/jobs.json` plus `state/review-candidates.json`.
+`state/jobs.json`, which is what the Jobs tab reads.
 
 After it runs, summarize for the user: how many roles matched, the top handful (company, title,
 match score, comp), and which boards failed if any (the `sources` list carries a plain-language

@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -142,6 +143,34 @@ def main() -> int:
         check("the renderer never overlaps a long employer with its dates",
               format_qa.analyze(wide, 2)["stats"]["collisions"] == 0,
               f"{format_qa.analyze(wide, 2)['stats']['collisions']} collision(s)")
+
+        # 3c. Every module has to agree on where the workspace is. They did not:
+        # the scout defaulted to the plugin's own workspace/ while the dashboard
+        # defaulted to ~/.recruit-copilot, so a default user's scouted jobs landed
+        # in a directory the Jobs tab never reads -- and got wiped on the next
+        # plugin version, which is the whole reason paths.py exists.
+        print("\n3c. one workspace, agreed on by every module")
+        sys.path.insert(0, os.path.join(ROOT, "dashboard"))
+        import paths  # noqa: E402
+        import job_scout  # noqa: E402
+        import server as dash_server  # noqa: E402
+        check("scout and dashboard resolve the same workspace",
+              job_scout.HOME == paths.home() == dash_server.HOME,
+              f"scout={job_scout.HOME} paths={paths.home()} server={dash_server.HOME}")
+        check("the workspace is outside the plugin tree",
+              not os.path.abspath(paths.home()).startswith(os.path.abspath(ROOT) + os.sep),
+              f"{paths.home()} vs plugin {ROOT}")
+
+        docs = []
+        for sub in ("commands", "skills"):
+            for dirpath, _dn, fns in os.walk(os.path.join(ROOT, sub)):
+                docs += [os.path.join(dirpath, f) for f in fns if f.endswith(".md")]
+        defaults = set()
+        for d in docs:
+            for m in re.finditer(r"RECRUIT_HOME:-([^}]*)", open(d, encoding="utf-8").read()):
+                defaults.add(m.group(1))
+        check("every command documents the same fallback path",
+              len(defaults) <= 1, f"found {sorted(defaults)}")
 
         # 4. Grading math: a known panel must produce the documented numbers.
         print("\n4. panel aggregation math")
