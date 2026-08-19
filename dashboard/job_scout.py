@@ -24,7 +24,6 @@ HOME = paths.home(create=True)
 STATE = os.path.join(HOME, "state")
 CFG = os.path.join(STATE, "target_companies.json")
 JOBS_OUT = os.path.join(STATE, "jobs.json")
-REVIEW_OUT = os.path.join(STATE, "review-candidates.json")
 
 DEFAULT_COMPANIES = [
     {"name": "Anthropic", "ats": "greenhouse", "token": "anthropic"},
@@ -37,8 +36,6 @@ DEFAULT_COMPANIES = [
 ]
 # Scoring comes from YOUR goals file, not from constants in here. See
 # dashboard/search_goals.py for why that matters.
-_PAY_RE = re.compile(r"\$\s?(\d{3},\d{3})(?:\s*(?:-|to|—|–)\s*\$?\s?(\d{3},\d{3}))?")
-
 
 def _get(url, timeout=30):
     req = urllib.request.Request(url, headers={"User-Agent": "recruit-copilot-jobscout/1.0"})
@@ -52,11 +49,9 @@ def score_job(title, location, search, jd_text=""):
 
 
 def _comp_from_text(text):
-    for m in _PAY_RE.finditer(text or ""):
-        lo, hi = m.group(1), m.group(2)
-        if int(lo.replace(",", "")) >= 100000:
-            return f"${lo}" + (f" - ${hi}" if hi else "")
-    return None
+    """Display string for the Jobs tab, from the same parser the scorer uses."""
+    band = search_goals.pay_band(text)
+    return band[2] if band else None
 
 
 # ---- ATS adapters: normalize to {title, location, url, id, raw_jd_fetch()} ----
@@ -82,6 +77,23 @@ def fetch_ashby(org):
     return out
 
 
+def _plain(content: str) -> str:
+    """Greenhouse ships the posting body as HTML-ESCAPED HTML, so unescaping has to
+    come first. Stripping tags before unescaping finds no tags to strip -- there are
+    no literal angle brackets yet -- and the unescape then turns the entities INTO
+    markup. Every Greenhouse posting was reaching the tailoring and grading steps as
+    a wall of div, h2, li and strong, which is what those steps were matching the
+    resume's keywords against."""
+    text = content or ""
+    for _ in range(3):                       # some entities arrive double escaped
+        once = html.unescape(text)
+        if once == text:
+            break
+        text = once
+    text = re.sub(r"<[^>]+>", " ", text).replace("\u00a0", " ")
+    return re.sub(r"[ \t]*\n\s*\n\s*", "\n\n", re.sub(r"[ \t]+", " ", text)).strip()
+
+
 def hydrate_jd(job):
     """Ensure job['jd_text'] is populated (Ashby already has it; Greenhouse fetch content)."""
     if job.get("jd_text"):
@@ -89,7 +101,7 @@ def hydrate_jd(job):
     if job["ats"] == "greenhouse":
         try:
             d = _get(f"https://boards-api.greenhouse.io/v1/boards/{job['token']}/jobs/{job['id']}?content=true")
-            job["jd_text"] = html.unescape(re.sub(r"<[^>]+>", " ", d.get("content", "")))
+            job["jd_text"] = _plain(d.get("content", ""))
         except Exception:
             job["jd_text"] = ""
     return job
@@ -157,11 +169,15 @@ def scout(per_company=5, min_match=None):
     now = datetime.now(timezone.utc).isoformat()
     json.dump({"generated": now, "search": search,
                "sources": sources, "total_matched": len(flat), "shown": min(60, len(flat)),
-               "jobs": [{k: j.get(k) for k in ("company", "title", "location", "match", "why", "comp", "url")} for j in flat[:60]],
+               "jobs": [dict({k: j.get(k) for k in ("company", "title", "location",
+                                                     "match", "why", "comp", "url")},
+                             # the posting body, for the roles deep enough to have been
+                             # hydrated, so /recruit:tailor has something to tailor TO
+                             # instead of asking the user to paste it back in
+                             jd_text=(j.get("jd_text") or "")[:12000] or None)
+                        for j in flat[:60]],
                "note": f"{len(flat)} roles matched across {len([s for s in sources if s.get('ok')])} boards (Greenhouse + Ashby, ToS-clean), scored against your goals."},
               open(JOBS_OUT, "w"), indent=2, default=str)
-    json.dump({"generated": now, "per_company": per_company, "companies": review},
-              open(REVIEW_OUT, "w"), indent=2, default=str)
     return {"sources": sources, "review": review, "flat": len(flat)}
 
 
@@ -191,4 +207,4 @@ if __name__ == "__main__":
         sys.exit(1)
     if failed:
         print(f"({len(failed)} of {len(r['sources'])} boards failed - see above)", file=sys.stderr)
-    print(f"wrote {JOBS_OUT} + {REVIEW_OUT}")
+    print(f"wrote {JOBS_OUT}")

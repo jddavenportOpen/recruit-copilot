@@ -172,6 +172,29 @@ def main() -> int:
         check("every command documents the same fallback path",
               len(defaults) <= 1, f"found {sorted(defaults)}")
 
+        # 3d. Two scouting bugs that only showed up against live postings.
+        print("\n3d. job scout reads postings the way a person would")
+        import search_goals  # noqa: E402
+        esc = ("&lt;h2&gt;&lt;strong&gt;Responsibilities:&lt;/strong&gt;&lt;/h2&gt;"
+               "&lt;li&gt;Build production applications with Claude.&lt;/li&gt;")
+        plain = job_scout._plain(esc)
+        check("an HTML-escaped posting body becomes prose, not markup",
+              "<" not in plain and "Responsibilities:" in plain and "Claude" in plain, repr(plain[:60]))
+
+        band = search_goals.pay_band("The base pay range for this role is $228,600 - $343,000 USD.")
+        _sc, why = search_goals.score(
+            "Forward Deployed Engineer", "Remote",
+            {"titles": {"strong": ["forward deployed engineer"], "medium": []},
+             "seniority": {"prefer": [], "avoid": []}, "comp_min": 300000,
+             "locations": ["remote"], "keywords_bonus": [], "min_match": 55},
+            "The base pay range for this role is $228,600 - $343,000 USD.")
+        pay_why = " ".join(r for r in why if "pay" in r)
+        check("the pay shown and the pay scored are the same number",
+              band is not None and str(band[1]) and f"${band[1]:,}" in pay_why,
+              f"shown={band[2] if band else None!r} why={pay_why!r}")
+        check("a signing bonus does not become the bottom of the band",
+              search_goals.pay_band("Pay: $180,000 to $260,000, plus a $25,000 signing bonus.")[0] == 180000, "")
+
         # 4. Grading math: a known panel must produce the documented numbers.
         print("\n4. panel aggregation math")
         def persona(score, vote):

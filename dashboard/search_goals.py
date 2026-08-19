@@ -51,6 +51,29 @@ EXAMPLE_GOALS = [
 ]
 
 _PAY = re.compile(r"\$\s?(\d{2,3}),?(\d{3})\b")
+_PAY_RANGE = re.compile(r"\$\s?(\d{2,3}),?(\d{3})\s*(?:-|to|\u2013|\u2014)\s*\$?\s?(\d{2,3}),?(\d{3})")
+
+
+def pay_band(text: str):
+    """The pay a posting states, as (low, high, display), or None.
+
+    There is exactly one of these on purpose. There used to be two -- the Jobs tab
+    printed the FIRST dollar figure it found and the scorer compared the LARGEST --
+    so a role listed at "$228,600" sat in the table underneath the sentence "posted
+    pay clears your $300,000 floor". Both halves were separately defensible and the
+    row as a whole was a lie. Display and decision now read the same number."""
+    t = text or ""
+    m = _PAY_RANGE.search(t)
+    if m:
+        lo = int(m.group(1) + m.group(2))
+        hi = int(m.group(3) + m.group(4))
+        if hi >= lo >= 20000:
+            return lo, hi, f"${lo:,} - ${hi:,}"
+    vals = [v for v in (int(m.group(1) + m.group(2)) for m in _PAY.finditer(t)) if v >= 20000]
+    if not vals:
+        return None
+    hi = max(vals)
+    return hi, hi, f"${hi:,}"
 
 
 class NoGoals(Exception):
@@ -77,11 +100,22 @@ def write_starter(state_dir: str) -> str:
     return p
 
 
+def _still_example(data: dict) -> bool:
+    """The marker alone is not proof. Someone who edits the file by hand -- which
+    ONBOARDING tells them to do -- usually changes the titles and leaves the marker
+    behind, and telling them their edited file is untouched is simply false. The
+    titles are what the marker is protecting, so if those have moved, it is theirs."""
+    search = data.get("search") or {}
+    strong = [t.strip().lower() for t in (search.get("titles") or {}).get("strong", [])]
+    return strong == [t.lower() for t in EXAMPLE_SEARCH["titles"]["strong"]]
+
+
 def is_unedited(state_dir: str) -> bool:
     """True when goals.json is still the untouched starter template."""
     try:
         with open(path_for(state_dir)) as f:
-            return bool(json.load(f).get(UNEDITED))
+            data = json.load(f)
+        return bool(data.get(UNEDITED)) and _still_example(data)
     except Exception:
         return False
 
@@ -106,7 +140,7 @@ def load(state_dir: str) -> dict:
     if not isinstance(data, dict):
         raise NoGoals(f"{p} should contain a JSON object with a `search` block, not a "
                       f"{type(data).__name__}. Delete it and run /recruit:goals.")
-    if data.get(UNEDITED):
+    if data.get(UNEDITED) and _still_example(data):
         raise NoGoals(
             f"{p} is still the untouched example. Scoring your search against somebody\n"
             f"else's target titles would quietly hand you the wrong jobs, so the scout stops here.\n"
@@ -130,14 +164,10 @@ def comp_meets(text: str, floor: int) -> bool | None:
     the job pays nothing."""
     if not floor:
         return None
-    best = None
-    for m in _PAY.finditer(text or ""):
-        val = int(m.group(1) + m.group(2))
-        if val >= 20000:                       # below this it is an hourly rate or a typo
-            best = max(best or 0, val)
-    if best is None:
+    band = pay_band(text)
+    if band is None:
         return None
-    return best >= floor
+    return band[1] >= floor
 
 
 def score(title: str, location: str, search: dict, jd_text: str = "") -> tuple[int, list[str]]:
@@ -185,11 +215,14 @@ def score(title: str, location: str, search: dict, jd_text: str = "") -> tuple[i
 
     floor = int(search.get("comp_min") or 0)
     if floor and jd_text:
-        ok = comp_meets(jd_text, floor)
+        band = pay_band(jd_text)
+        ok = None if band is None else band[1] >= floor
         if ok is True:
-            s += 6; reasons.append(f"posted pay clears your ${floor:,} floor")
+            s += 6
+            reasons.append(f"posted pay reaches ${band[1]:,}, clearing your ${floor:,} floor")
         elif ok is False:
-            s -= 25; reasons.append(f"posted pay is under your ${floor:,} floor")
+            s -= 25
+            reasons.append(f"posted pay tops out at ${band[1]:,}, under your ${floor:,} floor")
         else:
             reasons.append("no pay posted, so pay was not scored")
 

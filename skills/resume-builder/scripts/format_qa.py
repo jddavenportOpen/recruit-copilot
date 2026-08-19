@@ -23,6 +23,8 @@ import sys
 OVERFLOW_SLACK = 1.5
 OVERFLOW_HARD = 6.0        # past this the text is off the page, not merely tight
 COLLISION_SLACK = 0.5      # two runs on one baseline may touch, never overlap
+TOP_MARGIN, BOT_MARGIN = 52.0, 46.0
+UNDERFILL = 0.30           # empty tail this deep on a one-pager is worth mentioning
 MAX_BULLET_LINES = 2
 MAX_BULLET_LINES_WITH_URL = 3
 MIN_BULLET_WORDS = 4
@@ -35,7 +37,7 @@ BANNED = {"—": "em dash", "–": "en dash", "’": "curly apostrophe", "•": 
 def analyze(layout: dict, target_pages: int | None = None) -> dict:
     issues = []
     stats = {"pages": layout.get("pages", 0), "bullets": 0, "max_bullet_lines": 0,
-             "widest_overrun": 0.0, "collisions": 0}
+             "widest_overrun": 0.0, "collisions": 0, "fill_pct": None}
     right_edge = layout.get("text_right_edge", 558.0)
 
     def add(level, code, detail, **extra):
@@ -143,6 +145,19 @@ def analyze(layout: dict, target_pages: int | None = None) -> dict:
     # rather than failing on them, but you should know it happened.
     for note in layout.get("notes", []):
         add("warn", "render_fixup", note)
+
+    # a one-page resume that stops two inches early is not a failure, but it is
+    # unused space the user could be spending on another accomplishment, and the
+    # only way to know is to measure where the last line actually landed
+    if stats["pages"] == 1 and pages and pages[0].get("lines"):
+        ls = pages[0]["lines"]
+        band = layout.get("page_height", 792.0) - TOP_MARGIN - BOT_MARGIN
+        tail = layout.get("page_height", 792.0) - BOT_MARGIN - max(l["bbox"][3] for l in ls)
+        stats["fill_pct"] = round(100.0 * (1 - tail / band))
+        if band and tail / band > UNDERFILL:
+            add("warn", "page_underfill",
+                f"the page stops {tail / 72.0:.1f} inches early ({stats['fill_pct']}% full); "
+                f"you have room for more")
 
     # a mostly-empty last page reads as a formatting accident
     if stats["pages"] > 1:

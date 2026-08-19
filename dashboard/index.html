@@ -100,7 +100,11 @@ function renderResume(d){const c=$("#t-resume");c.innerHTML="";
   const list=el("div","grid cards");(d.resumes||[]).forEach(r=>{const card=el("div","card");
     let s=r.panel_avg!=null?`<span class='score ${scoreClass(r.panel_avg)}'>${r.panel_avg}</span> <span class='mut'>/100 · ${r.interview_votes??"–"}/3 votes</span>`:`<span class='mut'>ungraded</span>`;
     card.innerHTML=`<div class='title'>${esc(r.title)}</div><div class='mut'>${esc((r.updated||"").slice(0,10))} · ${r.kb}kb</div><div style='margin-top:8px'>${s}</div>`;
-    if(r.personas){card.innerHTML+=`<div class='mut' style='margin-top:6px'>HM ${r.personas.hiring_manager??"–"} · Rec ${r.personas.recruiter??"–"} · ATS ${r.personas.ai_systems_rep??"–"}</div>`;}
+    if(r.overall_pass!=null){const ok=r.overall_pass;
+      card.innerHTML+=`<div style='margin-top:6px'><span class='chip' style='border-color:var(--${ok?"good":"warn"});color:var(--${ok?"good":"warn"})'>`
+        +`${ok?"clears":"under"} ${esc(r.company||"the")} bar of ${r.threshold}${r.is_reach?" (reach)":""}</span></div>`;}
+    if(r.personas){card.innerHTML+=`<div class='mut' style='margin-top:6px'>HM ${r.personas.hiring_manager??"–"} · Rec ${r.personas.recruiter??"–"} · ATS ${r.personas.ai_systems_rep??"–"}`
+      +(r.weakest_persona?` · weakest: ${esc(r.weakest_persona)}`:"")+`</div>`;}
     if(r.keyword_match_pct!=null)card.innerHTML+=`<span class='chip'>kw ${r.keyword_match_pct}%</span>`;
     if(r.ai_risk)card.innerHTML+=`<span class='chip'>AI-risk ${esc(r.ai_risk)}</span>`;
     list.appendChild(card);});

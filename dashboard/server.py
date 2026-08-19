@@ -96,6 +96,13 @@ def read_resumes(limit=60):
             "keyword_match_pct": meta.get("keyword_match_pct"),
             "validation_passed": val.get("passed"),
             "panel_avg": grade.get("panel_avg"), "interview_votes": grade.get("interview_votes"),
+            # The average alone is not the answer. A reach employer needs 90 and a
+            # majority vote; everyone else needs 70. Showing 88.9 with no verdict
+            # reads as a near miss when it is a miss, which is the one thing this
+            # tab exists to tell you.
+            "company": grade.get("company"), "threshold": grade.get("threshold"),
+            "is_reach": grade.get("is_reach"), "overall_pass": grade.get("overall_pass"),
+            "weakest_persona": grade.get("weakest_persona"),
             "personas": {k: grade.get(k) for k in ("hiring_manager", "recruiter", "ai_systems_rep")} if grade.get("panel_avg") else None,
         })
     master = _load_json(MASTER, {})
@@ -158,6 +165,12 @@ def read_setup():
 
     jobs = _load_json(os.path.join(STATE, "jobs.json"), {})
     n_jobs = len(jobs.get("jobs", [])) if isinstance(jobs, dict) else 0
+    # Boards that ANSWERED, not boards you listed. A typo in a board token fails
+    # silently in the tab otherwise, and "6 boards" while two 404'd is just wrong.
+    _src = jobs.get("sources", []) if isinstance(jobs, dict) else []
+    n_ok = sum(1 for s_ in _src if s_.get("ok"))
+    n_failed = len(_src) - n_ok
+    n_matched = jobs.get("total_matched", n_jobs) if isinstance(jobs, dict) else n_jobs
 
     pdfs = glob.glob(os.path.join(RESUME_DIR, "*.pdf"))
     graded = [g for g in glob.glob(os.path.join(RESUME_DIR, "*-grade.json"))
@@ -176,7 +189,10 @@ def read_setup():
         {"n": 3, "title": "Scout roles",
          "why": "Pulls open roles from your target boards and scores each against your criteria, best first.",
          "command": "/recruit:scout", "done": n_jobs > 0,
-         "detail": f"{n_jobs} role(s) matched" + (f" from {n_targets} board(s)" if n_targets else "") if n_jobs else "not scouted yet"},
+         "detail": (f"{n_matched} role(s) matched"
+                    + (f" from {n_ok} board(s)" if n_ok else (f" from {n_targets} board(s)" if n_targets else ""))
+                    + (f"; {n_failed} board(s) failed, see the Jobs tab" if n_failed else "")
+                    ) if n_jobs else "not scouted yet"},
         {"n": 4, "title": "Build a tailored resume",
          "why": "Selects from your bank for one posting, renders an ATS-safe PDF, and proves a machine can still read it.",
          "command": "/recruit:tailor", "done": len(pdfs) > 0,
