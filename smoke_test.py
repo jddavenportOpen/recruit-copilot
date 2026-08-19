@@ -90,6 +90,59 @@ def main() -> int:
             with open(pdf, "rb") as fh:
                 check("PDF has a valid header", fh.read(5) == b"%PDF-", "")
 
+        # 3b. The layout gate has to catch what only the typeset page shows. These
+        # are regressions we actually shipped once: a long employer name printed on
+        # top of its own date range, and a right-aligned date measured before the
+        # renderer folded its en dash to a hyphen, which pushed it off the margin.
+        print("\n3b. layout gate catches page-only defects")
+        sys.path.insert(0, os.path.join(ROOT, "skills/resume-builder/scripts"))
+        import format_qa, render_resume, pdfwrite  # noqa: E402
+
+        def page(lines, pages=1):
+            return {"pages": pages, "page_width": 612.0, "page_height": 792.0,
+                    "text_right_edge": 558.0, "notes": [],
+                    "content": [{"page": i + 1, "lines": lines if i == 0 else []}
+                                for i in range(pages)]}
+
+        def run_line(text, x, w, kind="body", y=100.0):
+            return {"text": text, "kind": kind, "size": 9.2, "style": "regular",
+                    "bbox": [x, 792 - y - 9.2, x + w, 792 - y]}
+
+        r = format_qa.analyze(page([run_line("A Very Long Employer Name Indeed", 54, 400, "employer"),
+                                    run_line("January 2018 to December 2024", 420, 138, "dates")]), 1)
+        check("gate fails overlapping text on one baseline",
+              not r["passed"] and any(i["code"] == "text_collision" for i in r["issues"]),
+              f"issues={[i['code'] for i in r['issues']] or 'none'}")
+
+        r = format_qa.analyze(page([run_line("an unbreakable identifier off the page", 54, 530, "bullet")]), 1)
+        check("gate fails text well past the right margin",
+              not r["passed"] and any(i["code"] == "margin_overflow" for i in r["issues"]), "")
+
+        r = format_qa.analyze(page([run_line("Led a team \u2014 shipped fast", 54, 140, "summary")]), 1)
+        check("gate fails a typographic dash that reached the page",
+              not r["passed"] and any(i["code"] == "banned_glyph" for i in r["issues"]), "")
+
+        dash = os.path.join(ws, "resumes", "dash-align.pdf")
+        lay = render_resume.render(
+            {"name": "Dana Reyes", "contact": "dana@example.org | 555-0100",
+             "jobs": [{"company": "Acme", "title": "Engineer", "dates": "2018\u20132024",
+                       "bullets": ["Shipped a thing that mattered to real users."]}]}, dash)
+        dates = [l for pg in lay["content"] for l in pg["lines"] if l["kind"] == "dates"]
+        check("a right-aligned date stays inside the margin after folding",
+              bool(dates) and all(l["bbox"][2] <= lay["text_right_edge"] + 0.01 for l in dates),
+              f"{[round(l['bbox'][2], 1) for l in dates]} vs edge {lay['text_right_edge']}")
+
+        wide = render_resume.render(
+            {"name": "Dana Reyes", "contact": "dana@example.org",
+             "jobs": [{"company": "Metropolitan Interoperability and Data Platform Services "
+                                  "Group of the Greater Region", "title": "Engineer",
+                       "dates": "January 2018 to December 2024",
+                       "bullets": ["Shipped a thing that mattered to real users."]}]},
+            os.path.join(ws, "resumes", "wide-employer.pdf"))
+        check("the renderer never overlaps a long employer with its dates",
+              format_qa.analyze(wide, 2)["stats"]["collisions"] == 0,
+              f"{format_qa.analyze(wide, 2)['stats']['collisions']} collision(s)")
+
         # 4. Grading math: a known panel must produce the documented numbers.
         print("\n4. panel aggregation math")
         def persona(score, vote):

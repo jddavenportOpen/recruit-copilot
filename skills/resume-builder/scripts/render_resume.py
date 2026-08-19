@@ -31,6 +31,7 @@ TEXT_W = PAGE_W - 2 * MARGIN_X
 NAME_SIZE, CONTACT_SIZE = 15.0, 8.8
 HEAD_SIZE, BODY_SIZE = 9.6, 9.2
 BULLET_INDENT = 11.0
+MIN_COL_GAP = 12.0   # clear space between a left run and a right-aligned one
 SECTION_ORDER = ("SUMMARY", "EXPERIENCE", "EDUCATION", "SKILLS", "ADDITIONAL INFORMATION")
 
 
@@ -75,6 +76,40 @@ class Cursor:
                            "bullet" if i == 0 else "bullet_cont")
             self.y -= 1.9
 
+    def row(self, left, right, size, left_style="regular", right_style="regular",
+            kind_left="body", kind_right="body", gap=1.9):
+        """One baseline carrying a left run and a right-aligned run.
+
+        Drawing both at fixed x positions is how a long employer name ends up
+        printed on top of its own date range: the glyphs overlap, the page is
+        unreadable, and the text still extracts cleanly, so no round-trip check
+        would ever catch it. So the left run is wrapped to the space the right
+        run leaves, and if even its first line cannot clear it, the right run
+        takes its own baseline underneath. Overlap is never an outcome here.
+
+        Returns the number of extra lines used beyond the first."""
+        rw = P.text_width(right, size, right_style) if right else 0.0
+        avail = TEXT_W - (rw + MIN_COL_GAP) if right else TEXT_W
+        lines = P.wrap(left, size, left_style, avail) if left else [""]
+        fits = (not right) or P.text_width(lines[0], size, left_style) <= avail
+
+        self.need(size + gap)
+        self.y -= size
+        if left:
+            self.page.draw(lines[0], MARGIN_X, self.y, size, left_style, kind_left)
+        if right and fits:
+            self.page.draw(right, PAGE_W - MARGIN_X - rw, self.y, size, right_style, kind_right)
+        self.y -= gap
+
+        for ln in lines[1:]:
+            self.line(ln, size, left_style, kind_left, gap=gap)
+        if right and not fits:
+            self.need(size + gap)
+            self.y -= size
+            self.page.draw(right, PAGE_W - MARGIN_X - rw, self.y, size, right_style, kind_right)
+            self.y -= gap
+        return len(lines) - 1 + (0 if fits else 1)
+
     def section(self, title):
         self.need(HEAD_SIZE + 14)
         self.space(7)
@@ -84,8 +119,27 @@ class Cursor:
         self.y -= 8.0
 
 
+def _clean(value):
+    """Fold every string in the resume to what the font can actually draw, BEFORE
+    anything is measured.
+
+    Measuring the raw text and drawing the folded text is a real bug: an en dash
+    is 278 units wide and the hyphen it becomes is 333, and an em dash becomes
+    two characters. A right-aligned date measured before that substitution lands
+    past the right margin. Sanitizing once up front makes measurement and drawing
+    agree, and P.sanitize is idempotent so the later draw() call is a no-op."""
+    if isinstance(value, str):
+        return P.sanitize(value)
+    if isinstance(value, list):
+        return [_clean(v) for v in value]
+    if isinstance(value, dict):
+        return {_clean(k): _clean(v) for k, v in value.items()}
+    return value
+
+
 def render(resume: dict, out_path: str) -> dict:
     P.SUBSTITUTIONS.clear()
+    resume = _clean(resume)
     notes: list[str] = []
     doc = P.Document(PAGE_W, PAGE_H)
     c = Cursor(doc)
@@ -112,23 +166,19 @@ def render(resume: dict, out_path: str) -> dict:
         c.section("Experience")
         for job in resume["jobs"]:
             c.need(BODY_SIZE * 3)
-            left = f"{job.get('company','')}"
-            right = job.get("dates", "")
-            c.y -= BODY_SIZE
-            c.page.draw(left, MARGIN_X, c.y, BODY_SIZE, "bold", "employer")
-            if right:
-                w = P.text_width(right, BODY_SIZE, "regular")
-                c.page.draw(right, PAGE_W - MARGIN_X - w, c.y, BODY_SIZE, "regular", "dates")
-            c.y -= 1.9
+            extra = c.row(job.get("company", ""), job.get("dates", ""), BODY_SIZE,
+                          "bold", "regular", "employer", "dates")
+            if extra:
+                notes.append(f"{job.get('company','')!r} and its dates did not fit one row, "
+                             f"so the entry wrapped onto {extra} more line(s)")
             role = job.get("title", "")
             loc = job.get("location", "")
             if role or loc:
-                c.y -= BODY_SIZE
-                c.page.draw(role, MARGIN_X, c.y, BODY_SIZE, "italic", "role")
-                if loc:
-                    w = P.text_width(loc, BODY_SIZE, "italic")
-                    c.page.draw(loc, PAGE_W - MARGIN_X - w, c.y, BODY_SIZE, "italic", "location")
-                c.y -= 2.4
+                extra = c.row(role, loc, BODY_SIZE, "italic", "italic", "role", "location")
+                if extra:
+                    notes.append(f"{role!r} and {loc!r} did not fit one row, "
+                                 f"so the entry wrapped onto {extra} more line(s)")
+                c.space(0.5)
             for b in job.get("bullets", []):
                 c.bullet(b if isinstance(b, str) else b.get("text", ""))
             c.space(3.4)
@@ -137,12 +187,11 @@ def render(resume: dict, out_path: str) -> dict:
         c.section("Education")
         for e in resume["education"]:
             c.need(BODY_SIZE * 2)
-            c.y -= BODY_SIZE
-            c.page.draw(e.get("school", ""), MARGIN_X, c.y, BODY_SIZE, "bold", "school")
-            if e.get("dates"):
-                w = P.text_width(e["dates"], BODY_SIZE, "regular")
-                c.page.draw(e["dates"], PAGE_W - MARGIN_X - w, c.y, BODY_SIZE, "regular", "dates")
-            c.y -= 1.9
+            extra = c.row(e.get("school", ""), e.get("dates", ""), BODY_SIZE,
+                          "bold", "regular", "school", "dates")
+            if extra:
+                notes.append(f"{e.get('school','')!r} and its dates did not fit one row, "
+                             f"so the entry wrapped onto {extra} more line(s)")
             detail = ", ".join(x for x in (e.get("degree"), e.get("detail")) if x)
             if detail:
                 c.para(detail, BODY_SIZE, "regular", "edu_detail", width=TEXT_W)

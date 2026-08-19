@@ -40,8 +40,10 @@ Every score comes with the reasons that produced it.
 the closest summary, and renders a single-column PDF. Then two gates run:
 
 - **Layout** measures the rendered page, not the text: a contact line that wrapped, a
-  bullet running five lines, an orphaned section header, a URL past the margin. None
-  of that exists until the document is typeset, so no text-based score can see it.
+  bullet running five lines, an orphaned section header, a URL past the margin, a long
+  employer name printed on top of its own date range. None of that exists until the
+  document is typeset, so no text-based score can see it — and overlapping text still
+  extracts perfectly, so the round trip cannot see it either.
 - **Round trip** pulls the text back out of the finished PDF and diffs it against what
   was laid out. If your phone number does not survive extraction, nothing downstream
   will ever see it. This is the highest-value check here and almost nobody runs it.

@@ -21,6 +21,8 @@ import re
 import sys
 
 OVERFLOW_SLACK = 1.5
+OVERFLOW_HARD = 6.0        # past this the text is off the page, not merely tight
+COLLISION_SLACK = 0.5      # two runs on one baseline may touch, never overlap
 MAX_BULLET_LINES = 2
 MAX_BULLET_LINES_WITH_URL = 3
 MIN_BULLET_WORDS = 4
@@ -33,7 +35,7 @@ BANNED = {"—": "em dash", "–": "en dash", "’": "curly apostrophe", "•": 
 def analyze(layout: dict, target_pages: int | None = None) -> dict:
     issues = []
     stats = {"pages": layout.get("pages", 0), "bullets": 0, "max_bullet_lines": 0,
-             "widest_overrun": 0.0}
+             "widest_overrun": 0.0, "collisions": 0}
     right_edge = layout.get("text_right_edge", 558.0)
 
     def add(level, code, detail, **extra):
@@ -64,8 +66,32 @@ def analyze(layout: dict, target_pages: int | None = None) -> dict:
             over = l["bbox"][2] - right_edge
             if over > OVERFLOW_SLACK:
                 stats["widest_overrun"] = max(stats["widest_overrun"], over)
-                add("warn", "margin_overflow",
+                add("error" if over > OVERFLOW_HARD else "warn", "margin_overflow",
                     f"p{pno}: {over:.0f}pt past the right margin: {l['text'][:44]!r}")
+
+        # two runs sharing a baseline must not print on top of each other. This is
+        # the defect a text-based check can never see and the round trip cannot
+        # either: overlapping glyphs still extract as clean, complete text, so the
+        # file reads fine to a parser and is unreadable to a person. Only the
+        # measured page shows it.
+        rows = {}
+        for l in lines:
+            rows.setdefault(round(l["bbox"][1], 1), []).append(l)
+        for base in sorted(rows):
+            run = sorted(rows[base], key=lambda l: l["bbox"][0])
+            for a, b in zip(run, run[1:]):
+                over = a["bbox"][2] - b["bbox"][0]
+                if over > COLLISION_SLACK:
+                    stats["collisions"] += 1
+                    add("error", "text_collision",
+                        f"p{pno}: {over:.0f}pt of overlapping text: {a['text'][:26]!r} "
+                        f"prints over {b['text'][:26]!r}")
+
+        # a bullet broken across a page break leaves widow lines the grouping below
+        # would otherwise drop on the floor, so the bullet is never measured at all
+        if lines and lines[0]["kind"] == "bullet_cont":
+            add("warn", "split_bullet",
+                f"p{pno} opens mid-bullet: {lines[0]['text'][:44]!r}; move it whole or cut it")
 
         # bullets: measured line spans, not character estimates
         cur, groups = None, []
@@ -102,6 +128,16 @@ def analyze(layout: dict, target_pages: int | None = None) -> dict:
             if tail and tail[0]["text"].strip().upper() in SECTION_HEADERS:
                 add("warn", "orphan_header",
                     f"p{pno}: '{tail[0]['text'].strip()}' is stranded at the page bottom")
+
+    # the renderer folds these to ASCII on the way in, so finding one on the page
+    # means that folding did not happen and the character will extract as mojibake
+    for page in pages:
+        for l in page.get("lines", []):
+            for ch, label in BANNED.items():
+                if ch in l["text"]:
+                    add("error", "banned_glyph",
+                        f"p{page['page']}: a {label} survived to the page in "
+                        f"{l['text'][:40]!r}; it will not extract cleanly")
 
     # what the renderer had to change to make the document parseable. It fixes these
     # rather than failing on them, but you should know it happened.
@@ -146,7 +182,8 @@ def main():
         s = r["stats"]
         print(f"[{'PASS' if r['passed'] else 'FAIL'}] {r['errors']} error(s), "
               f"{r['warnings']} warning(s) | {s['pages']}p, {s['bullets']} bullets, "
-              f"longest bullet {s['max_bullet_lines']} lines")
+              f"longest bullet {s['max_bullet_lines']} lines, "
+              f"{s['collisions']} collision(s)")
         for i in r["issues"]:
             print(f"  {i['level'].upper():5} {i['code']}: {i['detail']}")
     sys.exit(0 if r["passed"] else 1)
