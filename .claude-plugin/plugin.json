@@ -1,6 +1,6 @@
 {
   "name": "recruit",
-  "version": "0.3.3",
+  "version": "0.4.0",
   "description": "A resume builder and job finder for Claude Code. Merges the resumes you already have into one master experience bank, scores open roles against goals you set, builds a tailored ATS-safe resume per job, and proves a machine can still read it. It never applies for you.",
   "author": {
     "name": "JD Davenport"
