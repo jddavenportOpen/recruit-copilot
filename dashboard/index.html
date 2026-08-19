@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Recruiting Dashboard</title>
+<title>Recruit Copilot</title>
 <style>
   :root{
     --bg:#0f1115; --panel:#171a21; --panel2:#1e222b; --line:#2a2f3a;
@@ -67,7 +67,7 @@
 </head>
 <body>
 <header>
-  <h1>Recruiting Dashboard</h1>
+  <h1>Recruit Copilot</h1>
   <span class="sub" id="sub">loading…</span>
 </header>
 <nav id="nav"></nav>
@@ -160,6 +160,18 @@ function renderStart(d){const c=$("#t-start");c.innerHTML="";
       <div>${s.done?"<span class='pill on'>done</span>":"<span class='mut'>run </span><code>"+esc(s.command)+"</code>"} <span class='chip'>${esc(s.detail||"")}</span></div>
     </div>`;
     c.appendChild(card);});
+}
+function renderSystem(d){const c=$("#t-system");c.innerHTML="";
+  const specs=d.recruiting_specialists||[], skills=d.recruiting_skills||[], pipe=d.pipeline||[];
+  c.appendChild(kpis([[specs.length,"grader agents"],[skills.length,"skills"],[pipe.length,"pipeline stages"]]));
+  const pc=el("div","card");pc.innerHTML="<div class='title'>The pipeline</div>";
+  pipe.forEach((stage,i)=>{pc.innerHTML+=`<div class='mut' style='margin-top:6px'><b>${i+1}.</b> ${esc(stage)}</div>`;});
+  c.appendChild(pc);
+  const ac=el("div","card");ac.innerHTML="<div class='title'>What ships in the plugin</div>";
+  ac.innerHTML+="<div style='margin-top:8px'>"+specs.map(x=>"<span class='chip'>"+esc(x)+"</span>").join("")+"</div>";
+  ac.innerHTML+="<div style='margin-top:6px'>"+skills.map(x=>"<span class='chip'>"+esc(x)+"</span>").join("")+"</div>";
+  c.appendChild(ac);
+  if(d.note)c.appendChild(note(d.note));
 }
 const R={start:renderStart,jobs:renderJobs,resume:renderResume,goals:renderGoals,system:renderSystem};
 async function load(){

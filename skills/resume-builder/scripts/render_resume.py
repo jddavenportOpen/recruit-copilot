@@ -28,8 +28,11 @@ MARGIN_BOT = 46.0
 PAGE_W, PAGE_H = 612.0, 792.0
 TEXT_W = PAGE_W - 2 * MARGIN_X
 
-NAME_SIZE, CONTACT_SIZE = 15.0, 8.8
-HEAD_SIZE, BODY_SIZE = 9.6, 9.2
+# 9.2pt body was small enough to read as shrunk-to-fit, which is the wrong signal to
+# send on a page that was still ending two inches early. 10.4 is inside the normal
+# 10-11pt band for a resume, reads better, and fills more of the page it is given.
+NAME_SIZE, CONTACT_SIZE = 17.0, 9.6
+HEAD_SIZE, BODY_SIZE = 11.0, 10.4
 BULLET_INDENT = 11.0
 MIN_COL_GAP = 12.0   # clear space between a left run and a right-aligned one
 SECTION_ORDER = ("SUMMARY", "EXPERIENCE", "EDUCATION", "SKILLS", "ADDITIONAL INFORMATION")
@@ -204,14 +207,27 @@ def render(resume: dict, out_path: str) -> dict:
             val = items if isinstance(items, str) else ", ".join(items)
             label = f"{cat}: "
             lw = P.text_width(label, BODY_SIZE, "bold")
-            first = P.wrap(val, BODY_SIZE, "regular", TEXT_W - lw)
+            # The first line starts after the label; the rest wrap back to a small
+            # hanging indent. Continuing them under the label's full width put a
+            # long category like "LLM and serving:" three inches in, which reads as
+            # a stray fragment rather than a continuation.
+            words = val.split()
+            line1, rest = [], []
+            for i, w in enumerate(words):
+                trial = " ".join(line1 + [w])
+                if P.text_width(trial, BODY_SIZE, "regular") <= TEXT_W - lw:
+                    line1.append(w)
+                else:
+                    rest = words[i:]
+                    break
             c.need(BODY_SIZE + 1.9)
             c.y -= BODY_SIZE
             c.page.draw(label, MARGIN_X, c.y, BODY_SIZE, "bold", "skill_label")
-            c.page.draw(first[0], MARGIN_X + lw, c.y, BODY_SIZE, "regular", "skill_value")
+            c.page.draw(" ".join(line1), MARGIN_X + lw, c.y, BODY_SIZE, "regular", "skill_value")
             c.y -= 1.9
-            for ln in first[1:]:
-                c.line(ln, BODY_SIZE, "regular", "skill_value", MARGIN_X + lw)
+            if rest:
+                for ln in P.wrap(" ".join(rest), BODY_SIZE, "regular", TEXT_W - BULLET_INDENT):
+                    c.line(ln, BODY_SIZE, "regular", "skill_value", MARGIN_X + BULLET_INDENT)
 
     if resume.get("additional"):
         c.section("Additional Information")

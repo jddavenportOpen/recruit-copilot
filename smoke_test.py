@@ -144,6 +144,23 @@ def main() -> int:
               format_qa.analyze(wide, 2)["stats"]["collisions"] == 0,
               f"{format_qa.analyze(wide, 2)['stats']['collisions']} collision(s)")
 
+        # A one-page resume that stops short is wasting the most valuable space the
+        # candidate has. The gate has to say so, and say how much room is left in
+        # bullets, because "76% full" is not an instruction.
+        sparse = render_resume.render(
+            {"name": "Dana Reyes", "contact": "dana@example.org | 555-0100",
+             "summary": "Engineer.",
+             "jobs": [{"company": "Acme", "title": "Engineer", "dates": "2022 to 2024",
+                       "bullets": ["Shipped one thing that mattered to real users."]}]},
+            os.path.join(ws, "resumes", "sparse.pdf"))
+        r = format_qa.analyze(sparse, 1)
+        uf = [i for i in r["issues"] if i["code"] == "page_underfill"]
+        check("gate flags a one-pager that leaves the page half empty",
+              bool(uf) and "bullet" in uf[0]["detail"],
+              uf[0]["detail"][:70] if uf else f"fill={r['stats']['fill_pct']}%")
+        check("body text is in the normal 10-11pt resume range, not shrunk to fit",
+              10.0 <= render_resume.BODY_SIZE <= 11.0, f"{render_resume.BODY_SIZE}pt")
+
         # 3c. Every module has to agree on where the workspace is. They did not:
         # the scout defaulted to the plugin's own workspace/ while the dashboard
         # defaulted to ~/.recruit-copilot, so a default user's scouted jobs landed
@@ -249,6 +266,28 @@ def main() -> int:
             with urllib.request.urlopen("http://127.0.0.1:8894/", timeout=10) as r:
                 html = r.read().decode()
             check("index.html serves with Start Here", "Start Here" in html, "")
+
+            # The dashboard is a single <script>. One undefined name in it is a
+            # ReferenceError at evaluation time, so nav() and load() never run and
+            # the page sits on "loading..." forever -- while every /api/* endpoint
+            # still answers 200 and every check above still passes. That shipped.
+            dispatch = re.search(r"const R=\{([^}]*)\}", html)
+            refs = re.findall(r":\s*(render[A-Za-z]+)", dispatch.group(1)) if dispatch else []
+            defined = set(re.findall(r"function\s+(render[A-Za-z]+)", html))
+            missing = [r for r in refs if r not in defined]
+            check("every tab renderer the dashboard dispatches actually exists",
+                  bool(refs) and not missing, f"referenced={refs} missing={missing or 'none'}")
+
+            calls = set(re.findall(r"\b([a-zA-Z_$][\w$]*)\s*\(", html))
+            declared = (set(re.findall(r"function\s+([a-zA-Z_$][\w$]*)", html))
+                        | set(re.findall(r"(?:const|let|var)\s+([a-zA-Z_$][\w$]*)\s*=", html)))
+            builtins = {"if", "for", "while", "switch", "catch", "return", "fetch", "String",
+                        "Number", "Object", "Array", "Date", "JSON", "parseInt", "parseFloat",
+                        "document", "console", "setTimeout", "Math", "isNaN", "encodeURIComponent"}
+            undefined = sorted(c for c in calls
+                               if c.startswith("render") and c not in declared and c not in builtins)
+            check("no undefined render function is called anywhere in the page",
+                  not undefined, f"undefined={undefined}")
         finally:
             srv.terminate()
             srv.wait(timeout=10)

@@ -24,7 +24,8 @@ OVERFLOW_SLACK = 1.5
 OVERFLOW_HARD = 6.0        # past this the text is off the page, not merely tight
 COLLISION_SLACK = 0.5      # two runs on one baseline may touch, never overlap
 TOP_MARGIN, BOT_MARGIN = 52.0, 46.0
-UNDERFILL = 0.30           # empty tail this deep on a one-pager is worth mentioning
+UNDERFILL = 0.12           # a one-pager should USE its page; 12% tail is about two bullets
+AVG_BULLET_PT = 25.0       # a typical two-line bullet at the shipped body size
 MAX_BULLET_LINES = 2
 MAX_BULLET_LINES_WITH_URL = 3
 MIN_BULLET_WORDS = 4
@@ -155,9 +156,11 @@ def analyze(layout: dict, target_pages: int | None = None) -> dict:
         tail = layout.get("page_height", 792.0) - BOT_MARGIN - max(l["bbox"][3] for l in ls)
         stats["fill_pct"] = round(100.0 * (1 - tail / band))
         if band and tail / band > UNDERFILL:
+            room = max(1, int(tail / AVG_BULLET_PT))
             add("warn", "page_underfill",
                 f"the page stops {tail / 72.0:.1f} inches early ({stats['fill_pct']}% full); "
-                f"you have room for more")
+                f"room for about {room} more bullet(s), go back to the bank and add the next "
+                f"most relevant ones")
 
     # a mostly-empty last page reads as a formatting accident
     if stats["pages"] > 1:

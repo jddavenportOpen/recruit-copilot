@@ -32,6 +32,13 @@ composing new claims.
   qualification is the exact failure this tool exists to prevent.
 - One page unless the user has more than roughly ten years of relevant history, then
   two. Never more.
+- **Fill the page you take.** A one-page resume that ends two inches early is not a tight
+  resume, it is a wasted one: that space is the most valuable real estate the candidate
+  has and it is being spent on nothing. Select enough to reach the bottom. If the layout
+  gate comes back with `page_underfill`, it tells you roughly how many more bullets fit.
+  Go back to the bank, take the next most relevant ones, and rebuild. Selecting fewer
+  bullets is only correct when the bank genuinely has nothing else the posting asks for,
+  and then say so rather than shipping a half-empty page.
 
 **3. Write the tailored resume JSON**, then build it:
 
