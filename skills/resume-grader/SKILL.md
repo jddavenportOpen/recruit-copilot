@@ -78,6 +78,20 @@ Report the returned `panel_avg`, `interview_votes`, `overall_pass`, per-persona 
 the `weakest_persona` with its reason. For a reach employer the bar is a majority interview
 vote AND panel_avg >= 90; otherwise panel_avg >= 70.
 
+## The aggregator is the only source of the score
+
+**Never compute, estimate, or average the panel yourself.** `aggregate.py` applies
+vote-coupling and the tiered pass bar; a mean you work out in your head silently skips
+both and reads high. Measured on a real resume: hand-averaging the same panel reported
+**88.3** where the aggregator returned **80.1**.
+
+So: `panel_avg`, `raw_panel_avg`, `interview_votes`, `overall_pass`, `threshold`,
+`weakest_persona` and the per-persona scores are reported **only** as the script printed
+them. If you cannot run it — Bash unavailable, script missing, a non-zero exit — say
+plainly that the panel could not be aggregated, show the raw per-persona JSON, and stop.
+A resume with no score is a normal outcome. A number that was never aggregated is a
+wrong answer wearing the costume of a right one.
+
 ## Honesty
 Grade what is on the page. Never invent strengths the resume does not show. If the resume
 makes a claim you cannot verify from its own content, treat it skeptically, do not reward it.

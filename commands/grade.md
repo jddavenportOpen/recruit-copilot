@@ -24,6 +24,10 @@ Steps:
    ```
 4. Report `panel_avg`, `interview_votes` out of 3, `overall_pass`, the per-persona scores, and the
    `weakest_persona` with its one-line reason, so the user knows exactly what to strengthen.
+   **Report only what the aggregator printed.** Do not average the personas yourself: the script
+   applies vote-coupling and the tiered pass bar, and a hand-computed mean skips both and reads
+   high. If it cannot run, say the panel could not be aggregated and stop — never present an
+   estimated score as the result.
 
 Optionally save the result next to the resume as `<name>-grade.json` in the workspace resumes dir so
 the Resume tab of the dashboard shows the score.
