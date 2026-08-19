@@ -110,17 +110,31 @@ def scout(per_company=5, min_match=None):
 
     flat, review, sources = [], [], []
     for c in companies:
+        # Be forgiving about the row shape: a hand-written config that omits "ats"
+        # means Greenhouse (the common case), and a missing token is a config error
+        # the user must be told about plainly, not a bare KeyError swallowed below.
+        name = c.get("name") or c.get("token") or "(unnamed)"
+        token = c.get("token")
+        ats = (c.get("ats") or "greenhouse").strip().lower()
+        if not token:
+            sources.append({"company": name, "ok": False,
+                            "error": 'missing "token" — add the board token, e.g. {"name": "Acme", "token": "acme"}'})
+            continue
+        if ats not in ("greenhouse", "ashby"):
+            sources.append({"company": name, "ok": False,
+                            "error": f'unknown ats "{ats}" — use "greenhouse" or "ashby"'})
+            continue
         try:
-            jobs = fetch_ashby(c["token"]) if c["ats"] == "ashby" else fetch_greenhouse(c["token"])
+            jobs = fetch_ashby(token) if ats == "ashby" else fetch_greenhouse(token)
         except Exception as e:
-            sources.append({"company": c["name"], "ok": False, "error": str(e)})
+            sources.append({"company": name, "ok": False, "error": str(e)})
             continue
         for j in jobs:
-            j["company"] = c["name"]
+            j["company"] = name
             j["match"], j["why"] = score_job(j["title"], j["location"], search)
         jobs.sort(key=lambda x: x["match"], reverse=True)
         kept = [j for j in jobs if j["match"] >= min_match]
-        sources.append({"company": c["name"], "ok": True, "total": len(jobs), "matched": len(kept)})
+        sources.append({"company": name, "ok": True, "total": len(jobs), "matched": len(kept)})
 
         top = kept[:per_company]
         for j in top:
@@ -130,7 +144,7 @@ def scout(per_company=5, min_match=None):
             j["match"], j["why"] = score_job(j["title"], j["location"], search, j.get("jd_text", ""))
         top.sort(key=lambda x: x["match"], reverse=True)
         flat.extend(kept)
-        review.append({"name": c["name"], "ats": c["ats"], "token": c["token"],
+        review.append({"name": name, "ats": ats, "token": token,
                        "jobs": [{k: j.get(k) for k in ("title", "location", "url", "id", "ats", "token",
                                                        "match", "why", "comp", "jd_text")} for j in top]})
 
@@ -159,4 +173,17 @@ if __name__ == "__main__":
     for co in r["review"]:
         print(f"{co['name']:<12} {len(co['jobs'])} selected: " +
               ", ".join(f"{j['title'][:28]}({j['match']})" for j in co["jobs"][:3]) + " ...")
+
+    # A board that failed is not a board with no matches. Say so, loudly, or a typo'd
+    # token looks exactly like "this company is not hiring".
+    failed = [s_ for s_ in r["sources"] if not s_.get("ok")]
+    ok = [s_ for s_ in r["sources"] if s_.get("ok")]
+    for s_ in failed:
+        print(f"FAILED {s_['company']}: {s_.get('error','')}", file=sys.stderr)
+    if not ok:
+        print(f"\nNo board could be read ({len(failed)} failed). Check the tokens in "
+              f"{CFG}, or your network connection.", file=sys.stderr)
+        sys.exit(1)
+    if failed:
+        print(f"({len(failed)} of {len(r['sources'])} boards failed - see above)", file=sys.stderr)
     print(f"wrote {JOBS_OUT} + {REVIEW_OUT}")

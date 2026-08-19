@@ -72,16 +72,14 @@
 </header>
 <nav id="nav"></nav>
 <main>
-  <div class="tab" id="t-review"></div>
+  <div class="tab" id="t-start"></div>
   <div class="tab" id="t-resume"></div>
   <div class="tab" id="t-goals"></div>
   <div class="tab" id="t-jobs"></div>
-  <div class="tab" id="t-networking"></div>
-  <div class="tab" id="t-applications"></div>
   <div class="tab" id="t-system"></div>
 </main>
 <script>
-const TABS=[["review","Review & Approve"],["resume","Resume"],["goals","Goals"],["jobs","Jobs"],["networking","Networking"],["applications","Applications"],["system","System Health"]];
+const TABS=[["start","Start Here"],["jobs","Jobs"],["resume","Resumes"],["goals","Goals"],["system","System Health"]];
 const $=s=>document.querySelector(s);
 const el=(t,c,h)=>{const e=document.createElement(t);if(c)e.className=c;if(h!=null)e.innerHTML=h;return e;};
 function scoreClass(n){return n==null?"m":n>=90?"g":n>=80?"w":n>=70?"":"b";}
@@ -102,7 +100,7 @@ function renderResume(d){const c=$("#t-resume");c.innerHTML="";
   const list=el("div","grid cards");(d.resumes||[]).forEach(r=>{const card=el("div","card");
     let s=r.panel_avg!=null?`<span class='score ${scoreClass(r.panel_avg)}'>${r.panel_avg}</span> <span class='mut'>/100 · ${r.interview_votes??"–"}/3 votes</span>`:`<span class='mut'>ungraded</span>`;
     card.innerHTML=`<div class='title'>${esc(r.title)}</div><div class='mut'>${esc((r.updated||"").slice(0,10))} · ${r.kb}kb</div><div style='margin-top:8px'>${s}</div>`;
-    if(r.personas){card.innerHTML+=`<div class='mut' style='margin-top:6px'>HM ${r.personas.hiring_manager??"–"} · Rec ${r.personas.recruiter??"–"} · AISys ${r.personas.ai_systems_rep??"–"}</div>`;}
+    if(r.personas){card.innerHTML+=`<div class='mut' style='margin-top:6px'>HM ${r.personas.hiring_manager??"–"} · Rec ${r.personas.recruiter??"–"} · ATS ${r.personas.ai_systems_rep??"–"}</div>`;}
     if(r.keyword_match_pct!=null)card.innerHTML+=`<span class='chip'>kw ${r.keyword_match_pct}%</span>`;
     if(r.ai_risk)card.innerHTML+=`<span class='chip'>AI-risk ${esc(r.ai_risk)}</span>`;
     list.appendChild(card);});
@@ -136,78 +134,35 @@ function renderJobs(d){const c=$("#t-jobs");c.innerHTML="";
   wrap.innerHTML=h+"</table>";c.appendChild(wrap);
 }
 
-function renderNetworking(d){const c=$("#t-networking");c.innerHTML="";
-  const g=d.trust_gate||{};
-  c.appendChild(kpis([[ (d.contacts||[]).length,"contacts"],[(d.meetings||[]).length,"meetings set"],[g.outreach_automation||"OFF","auto-outreach",g.outreach_automation==="ON"?"g":"w"]]));
-  const gate=el("div","card");gate.innerHTML=`<h3>Trust gate</h3><span class='pill ${g.outreach_automation==="ON"?"on":"off"}'>outreach automation: ${esc(g.outreach_automation||"OFF")}</span><div class='mut' style='margin-top:8px'>${esc(g.reason||"Human-approved until messaging is proven not-AI-sounding and not ban-risk.")}</div>`;
-  c.appendChild(gate);
-  if(!(d.contacts||[]).length){c.appendChild(note(d.note||""));return;}
-  const wrap=el("div","wrap card");let h="<table><tr><th>Contact</th><th>Company</th><th>Last messaged</th><th>Cadence</th><th>Meeting</th></tr>";
-  (d.contacts||[]).forEach(x=>h+=`<tr><td>${esc(x.name)}</td><td>${esc(x.company||"")}</td><td>${esc(x.last_messaged||"–")}</td><td>${esc(x.cadence||"")}</td><td>${esc(x.meeting||"")}</td></tr>`);
-  wrap.innerHTML=h+"</table>";c.appendChild(wrap);
-}
-
-function renderApplications(d){const c=$("#t-applications");c.innerHTML="";
+function renderStart(d){const c=$("#t-start");c.innerHTML="";
+  const steps=d.steps||[], done=d.done||0, total=d.total||5;
   c.appendChild(kpis([
-    [d.officially_submitted||0,"submitted (you click)"],
-    [d.verified_applied||0,"verified applied",(d.verified_applied?"g":"m")],
-    [d.avg_score??"–","avg resume score",scoreClass(d.avg_score)],
-    [d.total_batches||0,"copilot runs"]]));
-  c.appendChild(note(d.note||""));
-  if(!(d.recent||[]).length){c.appendChild(el("div","empty","No application records yet. Run the copilot on a job URL and it appears here."));return;}
-  const wrap=el("div","wrap card");let h="<table><tr><th>When</th><th>Company</th><th>Role</th><th>Score</th><th>Status</th><th>Verified</th></tr>";
-  (d.recent||[]).forEach(x=>h+=`<tr><td class='mut'>${esc((x.ts||"").slice(0,10))}</td><td>${esc(x.company)}</td><td>${esc(x.title)}</td><td class='${scoreClass(x.panel_avg)}'>${x.panel_avg??"–"}</td><td>${esc(x.status)}</td><td>${x.verified_applied?"<span class='pill on'>yes</span>":"<span class='mut'>–</span>"}</td></tr>`);
-  wrap.innerHTML=h+"</table>";c.appendChild(wrap);
+    [done+"/"+total,"steps complete",done===total?"g":(done?"w":"b")],
+    [d.complete?"yes":"no","running end to end",d.complete?"g":"m"],
+    [d.next?("step "+d.next):"–","do next"]]));
+  const intro=el("div","note","This is your setup walkthrough. Run each command below in your Claude Code session — this page reflects your progress live, so refresh after each step and watch it turn green. This tool prepares your applications; it never submits one for you.");
+  c.appendChild(intro);
+  if(d.complete){const ok=el("div","card");ok.style.borderColor="var(--good)";
+    ok.innerHTML="<h3 style='margin:0'>🎉 You're set — your copilot is running end to end.</h3><div class='mut' style='margin-top:6px'>Open <b>Jobs</b> for matched roles and <b>Resume</b> for your graded resumes. Re-run <code>/recruit:scout</code> anytime for fresh roles, and <code>/recruit:tailor</code> per posting.</div>";
+    c.appendChild(ok);}
+  steps.forEach(s=>{
+    const isNext=!s.done && s.n===d.next;
+    const card=el("div","card");
+    card.style.cssText="display:flex;gap:14px;align-items:flex-start"+(isNext?";border-color:var(--accent)":"");
+    const badge=`<div style="flex:none;width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;background:${s.done?'var(--good)':(isNext?'var(--accent)':'var(--panel2)')};color:${s.done||isNext?'#fff':'var(--muted)'}">${s.done?'✓':s.n}</div>`;
+    card.innerHTML=`${badge}<div style="flex:1;min-width:0">
+      <div class='title'>${esc(s.title)} ${isNext?"<span class='chip' style='background:var(--accent);color:#fff'>do this next</span>":""}</div>
+      <div class='mut' style='margin:3px 0 8px'>${esc(s.why)}</div>
+      <div>${s.done?"<span class='pill on'>done</span>":"<span class='mut'>run </span><code>"+esc(s.command)+"</code>"} <span class='chip'>${esc(s.detail||"")}</span></div>
+    </div>`;
+    c.appendChild(card);});
 }
-
-function renderSystem(d){const c=$("#t-system");c.innerHTML="";
-  c.appendChild(kpis([[d.total_agent_defs||0,"agent defs"],[d.total_skills||0,"skills"],[(d.recruiting_specialists||[]).length,"recruiting specialists"]]));
-  const p=el("div","card");p.appendChild(el("h3",null,"Apply pipeline (specialists in the loop)"));
-  p.innerHTML+=(d.pipeline||[]).map((s,i)=>`<span class='chip'>${i+1}. ${esc(s)}</span>`).join("");
-  c.appendChild(p);
-  const a=el("div","card");a.appendChild(el("h3",null,"Recruiting agents used"));
-  a.innerHTML+=((d.recruiting_specialists||[]).length?d.recruiting_specialists:["(defs land as OSS package is built)"]).map(x=>`<span class='chip'>${esc(x)}</span>`).join("");
-  c.appendChild(a);
-  const s=el("div","card");s.appendChild(el("h3",null,"Recruiting skills used"));
-  s.innerHTML+=(d.recruiting_skills||[]).map(x=>`<span class='chip'>${esc(x)}</span>`).join("");
-  c.appendChild(s);
-  c.appendChild(note(d.note||""));
-}
-
-async function post(url,body){await fetch(url,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body||{})});}
-function renderReview(d){const c=$("#t-review");c.innerHTML="";
-  const cos=d.companies||[], t=d.totals||{};
-  c.appendChild(kpis([[t.jobs||0,"jobs prepared"],[t.scored||0,"resumes graded"],[t.approved||0,"approved",t.approved?"g":"m"],[cos.length,"companies"]]));
-  if(d.note)c.appendChild(note(d.note));
-  const bar=el("div","card");bar.style.cssText="display:flex;justify-content:space-between;align-items:center";
-  bar.appendChild(el("div","title","Review each tailored resume, then approve"));
-  const allbtn=el("button","btn","✓ Approve all graded");
-  allbtn.onclick=async()=>{allbtn.textContent="…";await post("/api/approve-all",{approved:true});load();};
-  bar.appendChild(allbtn);c.appendChild(bar);
-  if(!cos.length){c.appendChild(el("div","empty","No review batch yet. It builds as resumes finish generating (refresh in a bit)."));return;}
-  cos.forEach(co=>{
-    const sec=el("div","card");
-    sec.appendChild(el("h3",null,`${esc(co.name)} <span class='mut'>${co.ready}/${co.total} ready · avg ${co.avg??'-'} · ${co.approved} approved</span>`));
-    (co.jobs||[]).forEach(j=>{
-      const scored=(j.panel_avg||0)>0;
-      const row=el("div","row");
-      const view=j.pdf?`<a class='view' href='/resume/${encodeURIComponent(j.pdf)}' target='_blank'>View resume ↗</a>`:`<span class='mut'>${esc(j.status||'pending')}${j.status==='generating'?' …':''}</span>`;
-      const fqa=j.format_qa_passed===true?"<span class='chip'>layout ✓</span>":(j.format_qa_passed===false?"<span class='chip'>layout ✗</span>":"");
-      const score=scored?`<span class='score ${scoreClass(j.panel_avg)}'>${j.panel_avg}</span> <span class='mut'>${j.interview_votes??''}/3 · ${(j.overall_pass?'pass':'below '+(j.threshold||''))}</span>`:(j.status&&j.status.startsWith('error')?`<span class='b'>error</span>`:`<span class='mut'>grading…</span>`);
-      const appr=j.approved?"<span class='pill on'>approved</span>":(scored?`<button class='btn sm apprbtn' data-pdf='${esc(j.pdf)}'>Approve</button>`:"");
-      row.innerHTML=`<div style='flex:1'><span class='chip'>${j.match??''}</span> <a href='${esc(j.url||'#')}' target='_blank' class='title' style='color:inherit'>${esc(j.title)}</a> <span class='mut'>${esc(j.comp||'')}</span> ${fqa}<div style='margin-top:3px'>${view}</div></div><div style='text-align:right;min-width:170px'>${score}<div style='margin-top:5px'>${appr}</div></div>`;
-      sec.appendChild(row);
-    });
-    c.appendChild(sec);
-  });
-  c.querySelectorAll(".apprbtn").forEach(b=>b.onclick=async()=>{b.textContent="…";await post("/api/approve",{pdf:b.dataset.pdf,approved:true});load();});
-}
-const R={review:renderReview,resume:renderResume,goals:renderGoals,jobs:renderJobs,networking:renderNetworking,applications:renderApplications,system:renderSystem};
+const R={start:renderStart,jobs:renderJobs,resume:renderResume,goals:renderGoals,system:renderSystem};
 async function load(){
   try{
     const r=await fetch("/api/all");DATA=await r.json();
     $("#sub").textContent="live · "+new Date().toLocaleString();
-    const KEY={resume:"resumes"};
+    const KEY={resume:"resumes",start:"setup"};
     for(const[id]of TABS){try{R[id](DATA[KEY[id]||id]||{});}catch(e){$("#t-"+id).innerHTML="<div class='empty'>render error: "+esc(e.message)+"</div>";}}
   }catch(e){$("#sub").textContent="error loading data: "+e.message;}
 }

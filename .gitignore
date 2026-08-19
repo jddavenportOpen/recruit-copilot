@@ -1,6 +1,16 @@
 __pycache__/
 *.pyc
 .DS_Store
-workspace/resumes/*.pdf
-workspace/state/*.json
+
+# Your workspace is YOURS. Nothing you generate or enter is ever committed.
+# The experience bank holds your real career history, contact details, and every
+# accomplishment you wrote down -- it must never be pushed to a fork or a PR.
+workspace/master-experience.json
+workspace/**/master-experience.json
+workspace/resumes/*
+!workspace/resumes/.gitkeep
+workspace/state/*
+!workspace/state/.gitkeep
+
+# ...but the shipped example template IS tracked (it is fictional).
 !workspace/master-experience.example.json

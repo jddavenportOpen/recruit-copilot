@@ -9,6 +9,12 @@ You are the grading panel. Claude scores the resume here in the session, so ther
 no API key and no marginal cost. A Python script does the arithmetic so the numbers
 never drift from the verdict.
 
+**Independent personas are better.** This plugin ships one agent definition per seat —
+`grader-hiring-manager`, `grader-recruiter`, `grader-ai-systems-rep`. When you can, run
+them as three parallel subagents and collect the persona object each returns: judges that
+cannot see each other's scores do not anchor on each other. Scoring all three yourself in
+one pass is the supported fallback and produces the same JSON shape.
+
 ## Inputs
 - The resume text (extract from the PDF/Doc if needed).
 - The job description text.
@@ -29,7 +35,7 @@ dimensions on the outcome-anchored 0-100 scale, then cast a would-interview vote
 **The three personas** (be discriminating, calibrated to the anchors, not merely harsh):
 - `hiring_manager` - can this person do the job on day one? Fit, credibility, depth.
 - `recruiter` - the 6-second skim: level match, keyword coverage, obvious yes/no.
-- `ai_systems_rep` - for technical roles, is this a real builder? Hard-to-fake signal, AI-tell detection.
+- `ai_systems_rep` - the **ATS / AI resume screener** (the machine gate before any human): parse-ability, must-have keyword & requirement match, knockout criteria, and ranking. Its `reason` names the specific missing keyword or knockout. (Display label: ATS.)
 
 **The outcome-anchored scale (critical - this is the calibration):**
 - 90-100 = strong yes, top 5 percent of the stack.
@@ -64,7 +70,8 @@ Emit one JSON object of this exact shape and write it to a temp file:
 Then run the deterministic aggregator (vote-coupling + tiered pass):
 
 ```bash
-python3 ${CLAUDE_PLUGIN_ROOT}/skills/resume-grader/scripts/aggregate.py /tmp/panel.json
+python3 ${CLAUDE_PLUGIN_ROOT}/skills/resume-grader/scripts/aggregate.py \
+    "${RECRUIT_HOME:-$HOME/.recruit-copilot}"/state/panel.json
 ```
 
 Report the returned `panel_avg`, `interview_votes`, `overall_pass`, per-persona scores, and

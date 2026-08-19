@@ -10,7 +10,7 @@ the two machine checks.
 
 ## Procedure
 
-**1. Read both sides.** The experience bank (`workspace/master-experience.json`) and
+**1. Read both sides.** The experience bank (`${RECRUIT_HOME:-$HOME/.recruit-copilot}/master-experience.json`) and
 the job posting. If the posting is only a URL, fetch it, or ask the user to paste it.
 
 **2. Select. Do not write.**
@@ -37,7 +37,8 @@ composing new claims.
 
 ```bash
 python3 ${CLAUDE_PLUGIN_ROOT}/skills/resume-builder/scripts/build.py \
-    /tmp/tailored.json --out workspace/resumes/<company>-<role>.pdf --pages 1
+    "${RECRUIT_HOME:-$HOME/.recruit-copilot}"/state/tailored.json \
+    --out "${RECRUIT_HOME:-$HOME/.recruit-copilot}"/resumes/<company>-<role>.pdf --pages 1
 ```
 
 Shape:

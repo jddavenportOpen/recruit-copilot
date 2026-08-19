@@ -86,7 +86,7 @@ def validate(bank: dict) -> dict:
             warn(f"{label}: dates {dates!r} are not in a form parsers read reliably; "
                  "prefer MM/YYYY to MM/YYYY or 'Present'")
         else:
-            parts = re.split(r"\s*(?:to|through|-|–|—)\s*", dates, 1)
+            parts = re.split(r"\s*(?:to|through|-|–|—)\s*", dates, maxsplit=1)
             start = _year(parts[0])
             end = None if re.search(r"present|current", parts[-1], re.I) else _year(parts[-1])
             if start:
@@ -140,12 +140,22 @@ def validate(bank: dict) -> dict:
     if not (bank.get("skills_pool") or {}):
         warn("no skills_pool; the skills section will be empty")
 
-    contact = (bank.get("contact") or {})
+    # contact may legitimately arrive as the schema object or, from a hand-edited
+    # bank, as the flat "email | phone | location" string the renderer uses. Either
+    # way there must be a reachable email, or the round-trip gate will hard-fail.
+    contact = bank.get("contact") or {}
     if isinstance(contact, dict):
         if not contact.get("email"):
             err("no contact email; the resume will fail the round-trip check")
         if not contact.get("phone"):
             warn("no contact phone")
+    elif isinstance(contact, str):
+        if not re.search(r"[\w.+\-]+@[\w\-]+\.\w{2,}", contact):
+            err("no contact email; the resume will fail the round-trip check")
+        if not re.search(r"\d{3}\D*\d{3}\D*\d{4}", contact):
+            warn("no contact phone")
+    else:
+        err("contact must be an object with an email (or a string containing one)")
 
     stats = {"jobs": len(jobs), "bullets": total_bullets,
              "summaries": len(summaries), "skill_groups": len(bank.get("skills_pool") or {})}

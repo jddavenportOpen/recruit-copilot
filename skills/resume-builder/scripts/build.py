@@ -67,7 +67,20 @@ def main():
         print(f"could not read {a.resume_json}: {e}", file=sys.stderr)
         sys.exit(3)
 
-    r = build(resume, a.out, a.pages)
+    if not isinstance(resume, dict):
+        print(f"{a.resume_json} should contain a JSON object describing one resume, "
+              f"not a {type(resume).__name__}.", file=sys.stderr)
+        sys.exit(3)
+    try:
+        r = build(resume, a.out, a.pages)
+    except Exception as e:
+        # Exit 3 is "bad input". Exiting 1 here would tell the caller the LAYOUT
+        # failed, and they would go cut words to fix a malformed-JSON problem.
+        print(f"could not render {a.resume_json}: {type(e).__name__}: {e}\n"
+              f"Expected shape: {{name, contact, summary, jobs:[{{company,title,location,"
+              f"dates,bullets:[...]}}], education:[...], skills:{{Category: 'a, b'}}}}",
+              file=sys.stderr)
+        sys.exit(3)
 
     if a.json:
         print(json.dumps(r, indent=2))

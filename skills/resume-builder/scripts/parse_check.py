@@ -40,6 +40,8 @@ CONTACT = {
 }
 EXPECTED_HEADERS = ("experience", "education", "skills")
 MIN_CHARS = 400
+# Below this, there is no resume here at all, regardless of recovery rate.
+ABSOLUTE_FLOOR = 120
 
 
 def extract_stdlib(data: bytes) -> str:
@@ -69,9 +71,26 @@ def check(pdf_path: str, expect: dict | None = None) -> dict:
     def soft(msg):
         res["violations"].append(msg); res["passed"] = False
 
-    if len(text.strip()) < MIN_CHARS:
-        hard(f"only {len(text.strip())} characters came back out; "
+    # "Did extraction work" is a question about RECOVERY RATE, not about length.
+    # A new grad with one short job can have a perfectly extractable 260-character
+    # resume; failing them with "probably an image" is wrong and unfixable advice.
+    # So compare against what was actually laid out, and keep an absolute floor only
+    # for the genuinely empty case.
+    got = len(text.strip())
+    laid_out = len((expect.get("source_text") or "").strip())
+    if laid_out:
+        recovered = got / laid_out
+        if recovered < 0.6:
+            hard(f"only {got} of about {laid_out} laid-out characters came back out "
+                 f"({recovered:.0%}); the text is not reliably extractable")
+            return res
+    elif got < MIN_CHARS:
+        hard(f"only {got} characters came back out; "
              "the file is probably an image or otherwise unextractable")
+        return res
+    if got < ABSOLUTE_FLOOR:
+        hard(f"only {got} characters came back out; there is not enough text here "
+             "for a resume to be readable at all")
         return res
 
     low = text.lower()

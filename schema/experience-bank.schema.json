@@ -4,9 +4,30 @@
   "title": "Recruit Copilot experience bank",
   "description": "The single source of truth for every generated resume. Every claim here must be true and confirmable by the candidate.",
   "type": "object",
-  "required": ["jobs"],
+  "required": ["name", "contact", "jobs"],
   "additionalProperties": true,
   "properties": {
+    "name": {
+      "type": "string",
+      "description": "The name that appears at the top of the resume."
+    },
+    "contact": {
+      "description": "How an employer reaches you. The email is required: the round-trip gate hard-fails a resume whose contact details do not survive extraction, because a resume nobody can reply to is a silent reject. A flat 'email | phone | location' string is also accepted.",
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["email"],
+          "additionalProperties": true,
+          "properties": {
+            "email": { "type": "string" },
+            "phone": { "type": "string" },
+            "location": { "type": "string" },
+            "links": { "type": "array", "items": { "type": "string" } }
+          }
+        },
+        { "type": "string" }
+      ]
+    },
     "jobs": {
       "type": "array",
       "description": "Roles, most recent first.",

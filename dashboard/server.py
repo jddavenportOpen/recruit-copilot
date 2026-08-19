@@ -4,13 +4,12 @@ recruiting workspace and serves it to the single-page app in index.html.
 
 Run:  python3 server.py            (then open http://localhost:8765)
 
-All state lives under a local workspace dir (RECRUIT_HOME, default ../workspace):
-  workspace/master-experience.json     your experience bank
-  workspace/resumes/                    generated resumes (+ -metadata.json, -grade.json)
-  workspace/state/goals.json            your goals
-  workspace/state/jobs.json             matched roles (written by job_scout.py)
-  workspace/state/apply_ledger.json     application runs
-  workspace/state/contacts.json         networking log
+Your workspace lives OUTSIDE the plugin tree (see paths.py), so a plugin update
+cannot strand it. Default ~/.recruit-copilot, override with $RECRUIT_HOME:
+  master-experience.json     your experience bank
+  resumes/                   generated resumes (+ -metadata.json, -grade.json)
+  state/goals.json           your goals + search criteria
+  state/jobs.json            matched roles (written by job_scout.py)
 
 Stdlib only, so it runs anywhere Python does and ships unchanged in the plugin.
 """
@@ -18,18 +17,23 @@ import glob
 import json
 import os
 import re
+import sys
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 PLUGIN_ROOT = os.path.dirname(HERE)
-HOME = os.environ.get("RECRUIT_HOME", os.path.join(PLUGIN_ROOT, "workspace"))
+sys.path.insert(0, HERE)
+import paths  # noqa: E402
+
+# The workspace lives outside the plugin tree so a plugin update cannot strand it.
+HOME = paths.home(create=True)
 RESUME_DIR = os.path.join(HOME, "resumes")
 STATE = os.path.join(HOME, "state")
 MASTER = os.path.join(HOME, "master-experience.json")
 if not os.path.exists(MASTER):
     # first-run: fall back to the shipped example so the dashboard demos out of the box
-    _ex = os.path.join(HOME, "master-experience.example.json")
+    _ex = os.path.join(PLUGIN_ROOT, "workspace", "master-experience.example.json")
     if os.path.exists(_ex):
         MASTER = _ex
 AGENTS_DIR = os.path.join(PLUGIN_ROOT, "agents")
@@ -103,25 +107,6 @@ def read_resumes(limit=60):
             "resumes": items, "count": len(items)}
 
 
-# ---- Tab 5: Applications ----
-def read_applications():
-    d = _load_json(os.path.join(STATE, "apply_ledger.json"), {})
-    batches = d.get("batches", [])
-    recent, scores = [], []
-    for b in batches[-30:]:
-        for r in (b.get("results") or []):
-            sc = r.get("scores") or {}
-            if isinstance(sc.get("panel_avg"), (int, float)):
-                scores.append(sc["panel_avg"])
-            recent.append({"ts": b.get("ts"), "company": r.get("company", ""), "title": r.get("title", ""),
-                           "status": r.get("status", ""), "panel_avg": sc.get("panel_avg"),
-                           "verified_applied": r.get("verified_applied", False)})
-    return {"total_batches": len(batches), "officially_submitted": len(d.get("applied_urls", [])),
-            "verified_applied": sum(1 for r in recent if r.get("verified_applied")),
-            "avg_score": round(sum(scores) / len(scores), 1) if scores else None,
-            "recent": list(reversed(recent))[:40],
-            "note": "The copilot fills and STOPS; you click Submit. 'Verified applied' means a confirmation was detected."}
-
 
 # ---- Tab 3: Jobs ----
 def read_jobs():
@@ -133,17 +118,6 @@ def read_jobs():
     return d
 
 
-# ---- Tab 4: Networking ----
-def read_networking():
-    d = _load_json(os.path.join(STATE, "contacts.json"), None)
-    if d is None:
-        return {"contacts": [], "meetings": [],
-                "trust_gate": {"outreach_automation": "OFF",
-                               "reason": "Outreach stays human-approved until your messaging is proven not-AI-sounding and not ban-risk."},
-                "note": "No contacts yet. Track who you messaged, last-contact date, cadence, and meetings in workspace/state/contacts.json."}
-    d.setdefault("trust_gate", {"outreach_automation": "OFF"})
-    return d
-
 
 # ---- Tab 6: System health ----
 def read_system():
@@ -151,55 +125,110 @@ def read_system():
     agents = sorted(os.path.basename(p)[:-3] for p in glob.glob(os.path.join(AGENTS_DIR, "*.md")))
     return {"total_agent_defs": len(agents), "total_skills": len(skills),
             "recruiting_specialists": agents, "recruiting_skills": skills,
-            "pipeline": ["job_scout (ingest+score)", "resume-generator skill (tailor)",
-                         "resume-grader skill (3-persona panel, in-session)", "format gate (ATS parse-safety)",
-                         "resume-intake (build the experience bank)", "resume-builder (tailor + layout + round-trip gates)"],
+            "pipeline": ["resume-intake (build the experience bank)",
+                         "job_scout (ingest + score roles against your goals)",
+                         "resume-builder (tailor + layout gate + round-trip gate)",
+                         "resume-grader (3-persona panel, in-session)"],
             "note": "Specialists = the agents + skills this plugin ships. Claude in your session is the LLM runtime (no API key)."}
 
 
-# ---- Review flow (companies x jobs, each with its resume + score + approve) ----
-def read_review():
-    d = _load_json(os.path.join(STATE, "review.json"), None)
-    if d is None:
-        return {"companies": [], "generated": None,
-                "note": "No review batch yet. Scout roles, then generate + grade a resume per role, then approve."}
-    order = d.get("companies_order") or []
-    by_co = {}
-    for r in d.get("results", []):
-        by_co.setdefault(r["company"], []).append(r)
-    companies = []
-    for name in order or list(by_co.keys()):
-        jobs = by_co.get(name, [])
-        ready = [j for j in jobs if (j.get("panel_avg") or 0) > 0]
-        companies.append({"name": name, "jobs": jobs, "ready": len(ready), "total": len(jobs),
-                          "approved": sum(1 for j in jobs if j.get("approved")),
-                          "avg": round(sum(j["panel_avg"] for j in ready) / len(ready), 1) if ready else None})
-    results = d.get("results", [])
-    return {"companies": companies, "generated": d.get("generated"),
-            "totals": {"jobs": len(results), "scored": sum(1 for r in results if (r.get("panel_avg") or 0) > 0),
-                       "approved": sum(1 for r in results if r.get("approved"))},
-            "note": "The copilot fills applications and STOPS at Submit. Approving marks a resume ready; you click Submit."}
 
 
-def _mutate_review(fn):
-    p = os.path.join(STATE, "review.json")
-    d = _load_json(p, None)
-    if not d:
-        return {"ok": False}
-    n = fn(d.get("results", []))
-    with open(p, "w") as fh:
-        json.dump(d, fh, indent=2, default=str)
-    return {"ok": True, "updated": n}
+# ---- Start Here: the guided walkthrough (detects real progress from the workspace) ----
+def read_setup():
+    """The onboarding checklist. Each step reports whether it is DONE by inspecting the
+    workspace, and the command a Claude Code user runs to do it. The dashboard turns a
+    step green once its artifact exists, so a new user watches the flow complete E2E."""
+    real_master = os.path.join(HOME, "master-experience.json")  # NOT the example fallback
+    bank = _load_json(real_master, {})
+    n_bank_jobs = len(bank.get("jobs", [])) if isinstance(bank, dict) else 0
+
+    goals = _load_json(os.path.join(STATE, "goals.json"), {})
+    goal_rows = (goals.get("goals", goals) if isinstance(goals, dict) else goals) or []
+    n_goals = len(goal_rows)
+    # The scout drops a starter goals.json when it refuses to run. That file is the
+    # author's example, not the user's search, so it must not tick this step green.
+    goals_unedited = bool(isinstance(goals, dict) and goals.get("_unedited_example"))
+    has_real_search = bool(isinstance(goals, dict)
+                           and ((goals.get("search") or {}).get("titles") or {}).get("strong")
+                           and not goals_unedited)
+
+    targets = _load_json(os.path.join(STATE, "target_companies.json"), {})
+    n_targets = len(targets.get("companies", [])) if isinstance(targets, dict) else 0
+
+    jobs = _load_json(os.path.join(STATE, "jobs.json"), {})
+    n_jobs = len(jobs.get("jobs", [])) if isinstance(jobs, dict) else 0
+
+    pdfs = glob.glob(os.path.join(RESUME_DIR, "*.pdf"))
+    graded = [g for g in glob.glob(os.path.join(RESUME_DIR, "*-grade.json"))
+              if (_load_json(g, {}) or {}).get("panel_avg")]
+
+    steps = [
+        {"n": 1, "title": "Build your experience bank",
+         "why": "Point it at the resumes you already have; it merges them into one honest bank every resume is drawn from.",
+         "command": "/recruit:intake", "done": os.path.exists(real_master) and n_bank_jobs > 0,
+         "detail": f"{n_bank_jobs} job(s) in your bank" if n_bank_jobs else "no bank yet"},
+        {"n": 2, "title": "Set what you're looking for",
+         "why": "Your goals and target titles decide which roles score high enough to surface.",
+         "command": "/recruit:goals", "done": has_real_search,
+         "detail": ("still the untouched example - edit it or run /recruit:goals" if goals_unedited
+                    else (f"{n_goals} goal(s) set" if has_real_search else "no goals yet"))},
+        {"n": 3, "title": "Scout roles",
+         "why": "Pulls open roles from your target boards and scores each against your criteria, best first.",
+         "command": "/recruit:scout", "done": n_jobs > 0,
+         "detail": f"{n_jobs} role(s) matched" + (f" from {n_targets} board(s)" if n_targets else "") if n_jobs else "not scouted yet"},
+        {"n": 4, "title": "Build a tailored resume",
+         "why": "Selects from your bank for one posting, renders an ATS-safe PDF, and proves a machine can still read it.",
+         "command": "/recruit:tailor", "done": len(pdfs) > 0,
+         "detail": f"{len(pdfs)} resume(s) built" if pdfs else "none built yet"},
+        {"n": 5, "title": "Grade it",
+         "why": "A calibrated 3-persona panel (Hiring Manager, Recruiter, ATS) scores it honestly so you know before you send.",
+         "command": "/recruit:grade", "done": len(graded) > 0,
+         "detail": f"{len(graded)} resume(s) graded" if graded else "none graded yet"},
+    ]
+    done = sum(1 for s in steps if s["done"])
+    nxt = next((s for s in steps if not s["done"]), None)
+    return {"steps": steps, "done": done, "total": len(steps), "complete": done == len(steps),
+            "next": nxt["n"] if nxt else None,
+            "note": "Run each command in your Claude Code session. This page reflects your progress live — "
+                    "refresh after each step and watch it turn green. This tool prepares your applications; it never submits."}
 
 
-ROUTES = {"/api/goals": read_goals, "/api/resumes": read_resumes, "/api/applications": read_applications,
-          "/api/jobs": read_jobs, "/api/networking": read_networking, "/api/system": read_system,
-          "/api/review": read_review}
+ROUTES = {"/api/setup": read_setup, "/api/goals": read_goals, "/api/resumes": read_resumes,
+          "/api/jobs": read_jobs, "/api/system": read_system}
+
+
+def _host_ok(host: str) -> bool:
+    """Reject any Host header that is not literally localhost.
+
+    Binding to 127.0.0.1 keeps other machines out, but it does NOT stop a web page
+    you are browsing from pointing its own hostname at 127.0.0.1 (DNS rebinding) and
+    then reading this API from your browser. Your experience bank and every resume
+    would be readable by that page. Checking Host closes it.
+    """
+    h = (host or "").strip().lower()
+    if not h:
+        return False
+    if h.startswith("["):                      # bracketed IPv6, e.g. [::1]:8765
+        h = h.split("]")[0].lstrip("[")
+    elif h.count(":") == 1:                    # host:port
+        h = h.split(":")[0]
+    return h in ("127.0.0.1", "localhost", "::1")
 
 
 class Handler(BaseHTTPRequestHandler):
     def log_message(self, *a):
         pass
+
+    def _guard(self) -> bool:
+        if _host_ok(self.headers.get("Host")):
+            return True
+        self._send(403, json.dumps({
+            "error": "refused: this dashboard only answers to localhost",
+            "detail": "The Host header was not localhost. This blocks a browsed web page "
+                      "from reaching your local workspace via DNS rebinding.",
+        }))
+        return False
 
     def _send(self, code, body, ctype="application/json"):
         data = body.encode() if isinstance(body, str) else body
@@ -210,6 +239,8 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(data)
 
     def do_GET(self):
+        if not self._guard():
+            return
         path = self.path.split("?")[0]
         if path in ("/", "/index.html"):
             try:
@@ -236,24 +267,19 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(200, json.dumps(ROUTES[path](), default=str))
         return self._send(404, json.dumps({"error": "not found"}))
 
-    def do_POST(self):
-        path = self.path.split("?")[0]
-        try:
-            length = int(self.headers.get("Content-Length", 0))
-            body = json.loads(self.rfile.read(length) or "{}") if length else {}
-        except Exception:
-            body = {}
-        if path == "/api/approve":
-            pdf, appr = body.get("pdf"), body.get("approved", True)
-            return self._send(200, json.dumps(_mutate_review(
-                lambda rows: sum(1 for r in rows if r.get("pdf") == pdf and (r.update(approved=bool(appr)) or True)))))
-        if path == "/api/approve-all":
-            appr = body.get("approved", True)
-            return self._send(200, json.dumps(_mutate_review(
-                lambda rows: sum(1 for r in rows if (r.get("panel_avg") or 0) > 0 and (r.update(approved=bool(appr)) or True)))))
-        return self._send(404, json.dumps({"error": "not found"}))
 
 
 if __name__ == "__main__":
+    try:
+        httpd = ThreadingHTTPServer(("127.0.0.1", PORT), Handler)
+    except OSError as e:
+        print(f"Could not start the dashboard on port {PORT}: {e}\n"
+              f"It may already be running at http://localhost:{PORT}. "
+              f"To use another port:  RECRUIT_DASH_PORT=8790 python3 {os.path.basename(__file__)}",
+              file=sys.stderr)
+        sys.exit(1)
     print(f"Recruit Copilot dashboard -> http://localhost:{PORT}  (workspace: {HOME})")
-    ThreadingHTTPServer(("127.0.0.1", PORT), Handler).serve_forever()
+    try:
+        httpd.serve_forever()
+    except KeyboardInterrupt:
+        print("\nstopped.")

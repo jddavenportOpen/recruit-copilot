@@ -48,8 +48,9 @@ the closest summary, and renders a single-column PDF. Then two gates run:
 
 **5. Grade.** Three personas read the result and each casts a would-interview vote: a
 recruiter doing a six-second skim, a hiring manager checking fit and believability, and
-an engineer asking whether you actually built any of it. Python does the arithmetic, so
-the score cannot flatter itself.
+the ATS itself — the machine gate most applications hit first, checking whether the file
+parses, whether the must-have keywords are actually present, and whether any stated
+knockout sinks it. Python does the arithmetic, so the score cannot flatter itself.
 
 **6. You apply.** It tells you where the PDF is. You take it from there.
 
@@ -60,13 +61,17 @@ the score cannot flatter itself.
 /plugin install recruit@recruit-copilot
 ```
 
-Or clone it and point Claude Code at the directory:
+Or clone it first and install from the local copy:
 
 ```bash
 git clone https://github.com/jddavenportOpen/recruit-copilot
 ```
+```
+/plugin marketplace add ./recruit-copilot
+/plugin install recruit@recruit-copilot
+```
 
-Needs Python 3 and Claude Code. **Nothing to pip install** — including the PDF work,
+Needs Python 3.9+ and Claude Code. **Nothing to pip install** — including the PDF work,
 which is why the renderer and both extractors are written against the standard
 library. `pip install pymupdf` is optional and upgrades the round-trip check to an
 independent, production-grade text engine.
@@ -86,6 +91,16 @@ it reads files, renders the PDF, measures the page, and does the panel arithmeti
 /recruit:dashboard   http://localhost:8765
 ```
 
+New here? Run `/recruit:dashboard` first and open the **Start Here** tab. It walks you
+through the five steps above in order, shows the exact command to run next, and turns
+each step green as you finish it — so you can watch your copilot come together end to end.
+
+Everything you create lives in `~/.recruit-copilot` (override with `$RECRUIT_HOME`). It
+is deliberately outside the plugin directory, so updating the plugin never touches your
+experience bank or your resumes. Nothing in there is ever uploaded anywhere.
+
+Want to understand or hand-write the experience bank? See [ONBOARDING.md](ONBOARDING.md).
+
 ## Invariants
 
 These are enforced in code, not promised in marketing.
@@ -97,7 +112,9 @@ These are enforced in code, not promised in marketing.
 4. **Scoring is yours.** No target titles or comp floors are baked into the code. With
    no goals file the scout refuses to run rather than quietly scoring your career
    against somebody else's.
-5. **Networking, if you use it, is drafts and tracking only.** You send the messages.
+5. **Your data stays on your machine.** The only network calls are to public job boards.
+   Your experience bank and resumes are never uploaded, and the local dashboard answers
+   only to localhost.
 
 ## Grading, and why it is calibrated
 
@@ -120,12 +137,29 @@ python3 skills/resume-grader/scripts/aggregate.py < panel.json
   the finished file. It cannot prove every commercial ATS parses it correctly, because
   those are closed systems nobody can test against. It rules out the failure modes that
   are testable.
-- The stdlib PDF reader handles the filter chains real resumes arrive with, and matches
-  PyMuPDF's word recovery exactly across a 200-file corpus. It will still lose to a real
-  engine on exotic encodings. Install PyMuPDF if you have unusual source documents.
-- Scanned, image-only resumes cannot be read. There is no OCR here. Export a text PDF.
+- The stdlib PDF reader handles what real resumes actually arrive as: the common filter
+  chains, and the CID/Type0 fonts with `ToUnicode` maps that Google Docs, Word and
+  browser "print to PDF" emit. It is still a few hundred lines, not a PDF engine — word
+  spacing on heavily kerned files is reconstructed from glyph positions and is not always
+  perfect. If you have unusual source documents, `pip install pymupdf` and both the intake
+  and the round-trip gate switch to it automatically; the gate reports which engine it
+  used, so you can see for yourself whether the two agree on your own files.
+- Scanned, image-only resumes still cannot be read. There is no OCR here.
 - Scouting covers Greenhouse and Ashby boards. Other ATS platforms are not wired.
 - Nothing here can tell whether a claim on your resume is true. Only you can.
+
+## Checking your install
+
+```bash
+python3 smoke_test.py
+```
+
+Builds a throwaway workspace in a temp directory, drives the real shipped scripts the
+way the `/recruit:` commands do, and checks what comes out: every script runs on stdlib
+alone, the example bank validates, a real PDF is produced with both gates green, the
+panel arithmetic matches the documented rules, and the dashboard serves every tab. No
+network, no API key, and it never touches your own workspace. Run it after cloning, or
+before opening a pull request.
 
 ## Related
 

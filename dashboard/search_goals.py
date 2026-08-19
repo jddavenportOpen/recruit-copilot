@@ -61,13 +61,29 @@ def path_for(state_dir: str) -> str:
     return os.path.join(state_dir, "goals.json")
 
 
+# Stamped into the starter file and removed the moment a human edits it. Without
+# this, run 1 refuses correctly, writes the example, and run 2 happily scores the
+# user's search against the AUTHOR's example titles -- the exact failure this
+# module exists to prevent.
+UNEDITED = "_unedited_example"
+
+
 def write_starter(state_dir: str) -> str:
     os.makedirs(state_dir, exist_ok=True)
     p = path_for(state_dir)
     if not os.path.exists(p):
         with open(p, "w") as f:
-            json.dump({"search": EXAMPLE_SEARCH, "goals": EXAMPLE_GOALS}, f, indent=2)
+            json.dump({UNEDITED: True, "search": EXAMPLE_SEARCH, "goals": EXAMPLE_GOALS}, f, indent=2)
     return p
+
+
+def is_unedited(state_dir: str) -> bool:
+    """True when goals.json is still the untouched starter template."""
+    try:
+        with open(path_for(state_dir)) as f:
+            return bool(json.load(f).get(UNEDITED))
+    except Exception:
+        return False
 
 
 def load(state_dir: str) -> dict:
@@ -79,8 +95,23 @@ def load(state_dir: str) -> dict:
             f"  {p}\n"
             f"Put your real target titles, comp floor and locations in the `search` block, "
             f"then run the scout again. Or run /recruit:goals and answer a few questions.")
-    with open(p) as f:
-        data = json.load(f)
+    try:
+        with open(p) as f:
+            data = json.load(f)
+    except json.JSONDecodeError as e:
+        raise NoGoals(
+            f"{p} is not valid JSON: {e}\n"
+            f"Fix that line (a stray comma or an unquoted key is the usual cause), or delete "
+            f"the file and run /recruit:goals to regenerate it.")
+    if not isinstance(data, dict):
+        raise NoGoals(f"{p} should contain a JSON object with a `search` block, not a "
+                      f"{type(data).__name__}. Delete it and run /recruit:goals.")
+    if data.get(UNEDITED):
+        raise NoGoals(
+            f"{p} is still the untouched example. Scoring your search against somebody\n"
+            f"else's target titles would quietly hand you the wrong jobs, so the scout stops here.\n"
+            f"Run /recruit:goals, or edit the `search` block and remove the "
+            f'"{UNEDITED}" line.')
     search = data.get("search")
     if not search or not (search.get("titles", {}).get("strong")):
         raise NoGoals(

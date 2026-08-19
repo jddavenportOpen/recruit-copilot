@@ -1,16 +1,31 @@
 # Onboarding: your experience bank
 
-The experience bank (`workspace/master-experience.json`) is the single source of truth for every resume this tool generates. This is the mechanical-honesty invariant: the copilot only writes what is in the bank, so **every bullet must be true and confirmable by you**. If a claim is not in the bank, it does not appear on a resume. If it is in the bank, you are standing behind it.
+The experience bank is the single source of truth for every resume this tool generates. This is the mechanical-honesty invariant: the copilot only writes what is in the bank, so **every bullet must be true and confirmable by you**. If a claim is not in the bank, it does not appear on a resume. If it is in the bank, you are standing behind it.
 
-Start from the template:
+**The easy way: run `/recruit:intake`.** Point it at the resumes you already have, in any mix of PDF, DOCX, TXT and Markdown, and it merges them into the bank for you, asking about anything that looks inflated or contradictory. Most people should do this instead of hand-writing JSON.
+
+The rest of this document is for understanding the file, or filling it in by hand.
+
+## Where it lives
+
+Your bank is `master-experience.json` inside your workspace, which is `~/.recruit-copilot` by default (override with `$RECRUIT_HOME`). That is deliberately outside the plugin directory so a plugin update cannot touch it. To start from the shipped template by hand:
 
 ```bash
-cp workspace/master-experience.example.json workspace/master-experience.json
+mkdir -p ~/.recruit-copilot
+cp "$CLAUDE_PLUGIN_ROOT"/workspace/master-experience.example.json ~/.recruit-copilot/master-experience.json
 ```
 
-Then edit it to describe your real history. The shape is validated by [schema/experience-bank.schema.json](schema/experience-bank.schema.json).
+Then edit it to describe your real history, and check it with:
 
-## The four parts
+```bash
+python3 "$CLAUDE_PLUGIN_ROOT"/skills/resume-intake/scripts/validate_bank.py ~/.recruit-copilot/master-experience.json
+```
+
+The shape is validated by [schema/experience-bank.schema.json](schema/experience-bank.schema.json).
+
+## The parts
+
+Before the four content sections below, the file needs two identity fields: **`name`** and **`contact`** (an object with `email`, `phone`, `location`, and optional `links`). The email matters more than it looks — the round-trip gate checks that your contact details survive extraction from the finished PDF, because a resume nobody can reply to is worse than no resume. An `education` array is optional but usually worth having.
 
 ### 1. jobs
 
@@ -55,10 +70,27 @@ Here `throughput` always appears (it is the strongest line); `team` and `cost` a
 
 ## Setting your targets for the scout
 
-Edit `workspace/state/target_companies.json` to control what the job scout ingests:
+Two different files, and it is worth knowing which does what.
 
-- **companies** the list of Greenhouse board tokens to scout (for a company careers page at `boards.greenhouse.io/acme`, the token is `acme`).
-- **strong_titles** and **medium_titles** the title keywords that define a strong or medium match for your search.
-- **criteria.min_match** the minimum score a role needs to show up.
+**What gets scouted — `state/target_companies.json`.** This controls only *which boards*
+are read. Each row is `{"name": ..., "ats": "greenhouse" | "ashby", "token": ...}`, where
+the token is the board slug: for `boards.greenhouse.io/acme` it is `acme`; for an Ashby
+board at `jobs.ashbyhq.com/acme` it is `acme`. `ats` defaults to `greenhouse` if you leave
+it out. If the file does not exist, a small built-in list of AI companies is used, so you
+can try the scout before deciding on targets.
 
-Then run `/recruit:scout` (or `python3 dashboard/job_scout.py`) and open the dashboard to see your matched roles.
+```json
+{"companies": [
+  {"name": "Acme",  "ats": "greenhouse", "token": "acme"},
+  {"name": "Globex", "ats": "ashby",     "token": "globex"}
+]}
+```
+
+**How roles are scored — `state/goals.json`.** Every title keyword, seniority preference,
+comp floor, location, and the `min_match` cutoff lives here, in the `search` block. This
+is the file that decides what counts as a match. Run `/recruit:goals` to fill it in by
+answering a few questions, or edit it directly. The scout refuses to run until it exists,
+rather than quietly scoring your career against somebody else's defaults.
+
+Then run `/recruit:scout` and open the dashboard's Jobs tab to see your matched roles,
+each with the reasons that produced its score.

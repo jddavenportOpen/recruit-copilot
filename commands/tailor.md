@@ -15,7 +15,8 @@ Steps:
 4. Build it:
    ```bash
    python3 ${CLAUDE_PLUGIN_ROOT}/skills/resume-builder/scripts/build.py \
-       /tmp/tailored.json --out <workspace>/resumes/<company>-<role>.pdf --pages 1
+       "${RECRUIT_HOME:-$HOME/.recruit-copilot}"/state/tailored.json \
+       --out "${RECRUIT_HOME:-$HOME/.recruit-copilot}"/resumes/<company>-<role>.pdf --pages 1
    ```
 5. Act on the gates. Layout failure (exit 1) means cut words and rebuild; never raise
    the page target to silence it. Round-trip failure (exit 2) means a machine cannot

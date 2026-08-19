@@ -16,6 +16,8 @@ Coordinates are PDF points (72/inch), origin bottom-left, US Letter 612x792.
 
 from __future__ import annotations
 
+import unicodedata
+
 # Base-14 Helvetica advance widths, 1/1000 em, ASCII 32..126.
 _HELV = [
     278, 278, 355, 556, 556, 889, 667, 191, 333, 333, 389, 584, 278, 333, 278, 278,
@@ -64,11 +66,40 @@ def sanitize(text: str) -> str:
             text = text.replace(bad, good)
     kept = []
     for c in text:
-        if 32 <= ord(c) <= 126 or c in "\n\t":
+        o = ord(c)
+        # WinAnsi covers Latin-1, so accented letters render natively. People's
+        # names are not decoration: dropping the accent from José or Zoë silently
+        # rewrites who they are, which this tool must never do.
+        if 32 <= o <= 126 or 0xA0 <= o <= 0xFF or c in "\n\t":
             kept.append(c)
         else:
             SUBSTITUTIONS["<dropped>"] = SUBSTITUTIONS.get("<dropped>", 0) + 1
     return "".join(kept)
+
+
+# Helvetica advance widths for the Latin-1 characters that are not composites of
+# an ASCII letter (composites -- á, ñ, ü ... -- take their base letter's width in
+# Helvetica, which _latin1_width derives instead of hardcoding).
+_LATIN1_SPECIAL = {
+    0xA0: 278, 0xA1: 333, 0xA2: 556, 0xA3: 556, 0xA4: 556, 0xA5: 556, 0xA6: 260,
+    0xA7: 556, 0xA8: 333, 0xA9: 737, 0xAA: 370, 0xAB: 556, 0xAC: 584, 0xAD: 333,
+    0xAE: 737, 0xAF: 333, 0xB0: 400, 0xB1: 584, 0xB2: 333, 0xB3: 333, 0xB4: 333,
+    0xB5: 556, 0xB6: 537, 0xB7: 278, 0xB8: 333, 0xB9: 333, 0xBA: 365, 0xBB: 556,
+    0xBC: 834, 0xBD: 834, 0xBE: 834, 0xBF: 611, 0xC6: 1000, 0xD0: 722, 0xD7: 584,
+    0xD8: 778, 0xDE: 667, 0xDF: 611, 0xE6: 889, 0xF0: 556, 0xF7: 584, 0xF8: 611,
+    0xFE: 556,
+}
+
+
+def _latin1_width(o: int, widths: list) -> int:
+    """Width of a Latin-1 code point. Accented Latin letters in Helvetica have the
+    same advance as the letter they are built from, so decompose and reuse it."""
+    if o in _LATIN1_SPECIAL:
+        return _LATIN1_SPECIAL[o]
+    base = unicodedata.normalize("NFD", chr(o))[:1]
+    if base and 32 <= ord(base) <= 126:
+        return widths[ord(base) - 32]
+    return widths[ord("o") - 32]
 
 
 def text_width(text: str, size: float, style: str = "regular") -> float:
@@ -76,7 +107,12 @@ def text_width(text: str, size: float, style: str = "regular") -> float:
     total = 0
     for ch in text:
         o = ord(ch)
-        total += widths[o - 32] if 32 <= o <= 126 else widths[0]
+        if 32 <= o <= 126:
+            total += widths[o - 32]
+        elif 0xA0 <= o <= 0xFF:
+            total += _latin1_width(o, widths)
+        else:
+            total += widths[0]
     return total * size / 1000.0
 
 

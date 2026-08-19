@@ -50,20 +50,74 @@ def is_reach(company):
     return any(c == r or c.startswith(r + " ") or c.startswith(r + ",") for r in REACH)
 
 
+def _score_of(d):
+    """A dimension may arrive as {"score": 88} or as a bare 88. Accept both; return
+    None for anything that is not a usable number (booleans are not numbers here)."""
+    if isinstance(d, dict):
+        d = d.get("score")
+    if isinstance(d, bool):
+        return None
+    if isinstance(d, (int, float)):
+        return float(d)
+    if isinstance(d, str):
+        try:
+            return float(d.strip())
+        except ValueError:
+            return None
+    return None
+
+
 def composite(dims):
     total, wsum = 0.0, 0
     for key, w in DIMENSION_WEIGHTS.items():
-        d = dims.get(key) or {}
-        s = d.get("score")
-        if isinstance(s, (int, float)):
+        s = _score_of(dims.get(key))
+        if s is not None:
             total += max(0, min(100, s)) * w
             wsum += w
-    return round(total / wsum, 1) if wsum else 0.0
+    # Divide by the FULL rubric weight, never by whatever happened to be present --
+    # renormalizing would let a persona scored on one dimension report that single
+    # score as its composite. aggregate() rejects partial panels before we get here;
+    # this is the second line of defence for library callers.
+    full = sum(DIMENSION_WEIGHTS.values())
+    return round(total / full, 1) if wsum == full else (round(total / wsum, 1) if wsum else 0.0)
+
+
+class IncompletePanel(ValueError):
+    """A persona is missing or unscored. Never average around it."""
 
 
 def aggregate(payload):
     company = payload.get("company", "")
     personas = payload.get("personas", {})
+    if not isinstance(personas, dict):
+        raise IncompletePanel("`personas` is missing or is not an object")
+
+    # A missing persona must NEVER be silently scored 0 -- that averages a real
+    # panel down and reports a confidently wrong number (one persona at 90 with two
+    # missing would read as 30/100, "fail"). An incomplete panel is not a low score,
+    # it is a failed grading run, and the caller has to know the difference.
+    missing = []
+    for p in PANEL:
+        pd = personas.get(p)
+        if not isinstance(pd, dict):
+            missing.append(f"{p} (absent)")
+            continue
+        dims = pd.get("dimensions")
+        if not isinstance(dims, dict):
+            missing.append(f"{p} (no dimensions)")
+            continue
+        # Every one of the five must be scored. Scoring a persona on a subset and
+        # renormalizing the weights silently reports the average of whatever showed
+        # up as though it were the full rubric.
+        absent = [k for k in DIMENSION_WEIGHTS if _score_of(dims.get(k)) is None]
+        if absent:
+            missing.append(f"{p} (missing dimension{'s' if len(absent) > 1 else ''}: {', '.join(absent)})")
+    if missing:
+        raise IncompletePanel(
+            "incomplete panel - " + ", ".join(missing) +
+            ". All three personas must be scored. Re-run the grading step; do not "
+            "publish a partial panel as a score.")
+
     scores, votes = {}, {}
     for p in PANEL:
         pd = personas.get(p) or {}
@@ -90,6 +144,40 @@ def aggregate(payload):
     }
 
 
+USAGE = """usage: aggregate.py [panel.json]
+
+Aggregate a 3-persona grading panel into a final score. Reads the panel JSON from
+the given file, or from stdin if no file is given.
+
+  python3 aggregate.py panel.json
+  python3 aggregate.py < panel.json
+
+Applies vote-coupling (a would-interview persona floors at 85) and the tiered pass
+bar (reach employers need a majority interview vote AND panel_avg >= 90; everyone
+else needs panel_avg >= 70). Prints the result as JSON."""
+
 if __name__ == "__main__":
-    src = open(sys.argv[1]) if len(sys.argv) > 1 else sys.stdin
-    print(json.dumps(aggregate(json.load(src)), indent=2))
+    args = sys.argv[1:]
+    if args and args[0] in ("-h", "--help"):
+        print(USAGE)
+        sys.exit(0)
+    try:
+        src = open(args[0]) if args else sys.stdin
+    except OSError as e:
+        print(f"cannot read {args[0]}: {e}\n\n{USAGE}", file=sys.stderr)
+        sys.exit(2)
+    try:
+        data = json.load(src)
+    except json.JSONDecodeError as e:
+        print(f"that is not valid JSON: {e}\n\n{USAGE}", file=sys.stderr)
+        sys.exit(2)
+    try:
+        print(json.dumps(aggregate(data), indent=2))
+    except IncompletePanel as e:
+        print(f"{e}", file=sys.stderr)
+        sys.exit(3)
+    except (KeyError, TypeError, AttributeError) as e:
+        print(f"the panel JSON is missing something aggregate.py needs: {e}\n"
+              f"Expected {{'company': ..., 'personas': {{hiring_manager, recruiter, ai_systems_rep}}}},\n"
+              f"each with five scored dimensions and a would_interview vote.\n\n{USAGE}", file=sys.stderr)
+        sys.exit(2)
