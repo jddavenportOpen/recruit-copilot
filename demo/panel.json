@@ -1,0 +1,38 @@
+{
+  "company": "Anthropic",
+  "personas": {
+    "hiring_manager": {
+      "dimensions": {
+        "quantified_impact_credibility": {"score": 94},
+        "keyword_requirement_coverage": {"score": 88},
+        "experience_domain_relevance": {"score": 95},
+        "target_employer_convention_fit": {"score": 88},
+        "structure_clarity_execution": {"score": 90}
+      },
+      "would_interview": true,
+      "reason": "Latency and reliability numbers are specific and defensible; this person has shipped."
+    },
+    "recruiter": {
+      "dimensions": {
+        "quantified_impact_credibility": {"score": 90},
+        "keyword_requirement_coverage": {"score": 88},
+        "experience_domain_relevance": {"score": 92},
+        "target_employer_convention_fit": {"score": 86},
+        "structure_clarity_execution": {"score": 92}
+      },
+      "would_interview": true,
+      "reason": "Clears the level bar in the first six seconds; title and scope read senior."
+    },
+    "ai_systems_rep": {
+      "dimensions": {
+        "quantified_impact_credibility": {"score": 84},
+        "keyword_requirement_coverage": {"score": 72},
+        "experience_domain_relevance": {"score": 86},
+        "target_employer_convention_fit": {"score": 80},
+        "structure_clarity_execution": {"score": 88}
+      },
+      "would_interview": false,
+      "reason": "Parses clean, but the posting's stated must-have 'evaluation' appears nowhere on the page."
+    }
+  }
+}

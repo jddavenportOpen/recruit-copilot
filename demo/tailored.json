@@ -1,0 +1,38 @@
+{
+  "name": "Your Name",
+  "contact": "you@example.com | 555-123-4567 | City, ST | linkedin.com/in/yourhandle",
+  "summary": "Platform-minded engineer who turns fragile services into dependable ones. Owns latency, reliability, and cost, and leaves behind the practices a team keeps using.",
+  "jobs": [
+    {
+      "company": "Northwind Labs",
+      "title": "Senior Software Engineer",
+      "location": "Remote",
+      "dates": "2022 to Present",
+      "bullets": [
+        "Cut checkout latency from 3.2s to 410ms by rebuilding the pricing path as a streaming service, lifting conversion 5 percent.",
+        "Drove p99 error rate from 1.4 percent to 0.2 percent by adding backpressure and idempotent retries to the ingest queue.",
+        "Reduced cloud spend 18 percent by right-sizing the batch fleet and autoscaling on real demand signals.",
+        "Mentored 4 engineers and introduced the review checklist the platform team later adopted org-wide."
+      ]
+    },
+    {
+      "company": "Harbor Analytics",
+      "title": "Software Engineer",
+      "location": "Austin, TX",
+      "dates": "2019 to 2022",
+      "bullets": [
+        "Built the ETL pipeline that consolidated 6 data sources into one warehouse, cutting report turnaround from days to minutes.",
+        "Shipped the public REST API used by 30 partner integrations, with versioning and rate limiting from day one.",
+        "Owned on-call for the data platform and wrote the runbooks that cut mean time to recovery by 40 percent."
+      ]
+    }
+  ],
+  "education": [
+    {"school": "State University", "degree": "BS, Computer Science", "dates": "2015 to 2019"}
+  ],
+  "skills": {
+    "Languages": "Python, Go, TypeScript, SQL",
+    "Systems": "Postgres, Kafka, Redis, Kubernetes, AWS",
+    "Practices": "Distributed systems, streaming pipelines, observability, on-call, code review"
+  }
+}
