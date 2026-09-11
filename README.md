@@ -58,19 +58,31 @@ knockout sinks it. Python does the arithmetic, so the score cannot flatter itsel
 
 ## Install
 
+From your terminal. This block is safe to paste whole:
+
+```bash
+claude plugin marketplace add jddavenportOpen/recruit-copilot && claude plugin install recruit@recruit-copilot
+```
+
+Or from inside Claude Code, one command at a time. Paste both lines together and
+`/plugin marketplace add` reads the second line as part of the repo name, then fails with
+"not a valid GitHub owner/repo shorthand".
+
 ```
 /plugin marketplace add jddavenportOpen/recruit-copilot
+```
+
+```
 /plugin install recruit@recruit-copilot
 ```
+
+Then restart Claude Code (or run `/reload-plugins`) and type `/recruit:` to see the commands.
 
 Or clone it first and install from the local copy:
 
 ```bash
 git clone https://github.com/jddavenportOpen/recruit-copilot
-```
-```
-/plugin marketplace add ./recruit-copilot
-/plugin install recruit@recruit-copilot
+claude plugin marketplace add ./recruit-copilot && claude plugin install recruit@recruit-copilot
 ```
 
 Needs Python 3.9+ and Claude Code. **Nothing to pip install** — including the PDF work,
