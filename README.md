@@ -47,6 +47,19 @@ Enough of those and the question becomes answerable: **does a panel score predic
 category can answer that today, because nobody records the other end.
 [`outcomes/README.md`](outcomes/README.md) is where it accumulates, in public, starting at zero.
 
+## Running it without Claude Code
+
+The two scripts that produce every number are plain Python with **zero third-party imports**,
+and the three judges are plain prompts any model can take. If you are an agent, a CI job, or a
+person with a terminal: [`RUNNING-WITHOUT-CLAUDE-CODE.md`](RUNNING-WITHOUT-CLAUDE-CODE.md) is
+the whole contract — three commands, the exact JSON the aggregator expects, and the data
+boundary to hold if you are operating on someone else's history.
+
+```bash
+git clone https://github.com/jddavenportOpen/recruit-copilot.git
+cd recruit-copilot && python3 smoke_test.py     # 40 checks, no install
+```
+
 ## Why it is built this way
 
 There is a subscription industry charging $30 to $80 a month to spray applications on your behalf.
