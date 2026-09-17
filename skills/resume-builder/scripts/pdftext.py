@@ -103,11 +103,17 @@ def decode_stream(raw: bytes, filters: list[str]) -> bytes:
             out = raw
             for fn in chain:
                 out = fn(out)
-            if b"Tj" in out or b"TJ" in out:
+            if _HAS_TEXT_OP.search(out):
                 return out
         except Exception:
             continue
     return b""
+
+
+# A text-showing operator in OPERATOR POSITION. Deliberately not a bare `'` substring
+# test: an apostrophe inside a literal string ("O'Brien") is text, not an operator, and
+# a permissive test would let decode_stream accept a wrongly-decoded chain as "has text".
+_HAS_TEXT_OP = re.compile(rb"Tj|TJ|[)>]\s*['\"]")
 
 
 _STREAM = re.compile(rb"<<(?P<dict>.*?)>>\s*stream\r?\n?(?P<body>.*?)\r?\n?endstream", re.S)
@@ -121,6 +127,12 @@ _SHOW = re.compile(
     r"|(?P<lit>\((?:[^()\\]|\\.)*\))\s*Tj"
     r"|(?P<hex><[0-9A-Fa-f\s]*>)\s*Tj"
     r"|(?P<arr>\[(?:[^\[\]\\]|\\.)*\])\s*TJ"
+    # PDF 1.7 s9.4.3: `str '` is T* then show, and `aw ac str "` is the same with
+    # spacing set first. Ghostscript emits ' for every line after a TL, which is
+    # what Word, Google Docs and LaTeX distill through -- so an extractor that only
+    # knows Tj/TJ silently drops the contact line and every section header.
+    r"|(?P<qlit>\((?:[^()\\]|\\.)*\))\s*[\'\"]"
+    r"|(?P<qhex><[0-9A-Fa-f\s]*>)\s*[\'\"]"
     rf"|(?P<td>{_NUM})\s+(?P<tdy>{_NUM})\s+(?:Td|TD)"
     rf"|{_NUM}\s+{_NUM}\s+{_NUM}\s+{_NUM}\s+(?P<tmx>{_NUM})\s+(?P<tmy>{_NUM})\s+Tm"
     r"|(?P<star>\bT\*)|(?P<et>\bET\b)")
@@ -257,7 +269,7 @@ def text_from_bytes(data: bytes) -> str:
         filters = [(a or b).decode() + ("Decode" if a else "")
                    for a, b in names]
         body = decode_stream(m.group("body"), filters)
-        if b"Tj" not in body and b"TJ" not in body:
+        if not _HAS_TEXT_OP.search(body):
             continue
         s = body.decode("latin-1", "replace")
         line: list[str] = []
@@ -314,6 +326,11 @@ def text_from_bytes(data: bytes) -> str:
                 at_text(); t = _decode_str(g("lit"), cur); line.append(t); advance(t)
             elif g("hex") is not None:
                 at_text(); t = _decode_str(g("hex"), cur); line.append(t); advance(t)
+            elif g("qlit") is not None or g("qhex") is not None:
+                # ' and " advance to the next line BEFORE showing.
+                flush(); line_y = None
+                raw_tok = g("qlit") if g("qlit") is not None else g("qhex")
+                at_text(); t = _decode_str(raw_tok, cur); line.append(t); advance(t)
             elif g("arr") is not None:
                 at_text(); _n = len(line)
                 for st in _STR_IN_ARR.finditer(g("arr")):

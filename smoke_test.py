@@ -161,6 +161,52 @@ def main() -> int:
         check("body text is in the normal 10-11pt resume range, not shrunk to fit",
               10.0 <= render_resume.BODY_SIZE <= 11.0, f"{render_resume.BODY_SIZE}pt")
 
+        # 3b-ii. The intake reader has to handle the ' and " text-showing operators
+        # (PDF 1.7 s9.4.3), not just Tj/TJ. Ghostscript emits ' for every line after
+        # a TL, and that is what Word, Google Docs and LaTeX distill through -- so a
+        # reader that only knows Tj returns the FIRST line of such a resume and
+        # silently drops the contact line and every section header. Measured on a
+        # real gs-distilled file before the fix: 4% recall, only the name survived.
+        print("\n3b-ii. intake reads the ' and \" text operators, not just Tj")
+        import pdftext  # noqa: E402
+
+        def _mini_pdf(body: bytes) -> bytes:
+            """Smallest valid PDF carrying one uncompressed content stream."""
+            objs = [
+                b"<< /Type /Catalog /Pages 2 0 R >>",
+                b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+                b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] "
+                b"/Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>",
+                b"<< /Length %d >>\nstream\n%s\nendstream" % (len(body), body),
+                b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+            ]
+            out, offs = b"%PDF-1.4\n", []
+            for i, o in enumerate(objs, 1):
+                offs.append(len(out))
+                out += b"%d 0 obj\n%s\nendobj\n" % (i, o)
+            xref = len(out)
+            out += b"xref\n0 %d\n0000000000 65535 f \n" % (len(objs) + 1)
+            for off in offs:
+                out += b"%010d 00000 n \n" % off
+            out += (b"trailer\n<< /Size %d /Root 1 0 R >>\nstartxref\n%d\n%%%%EOF\n"
+                    % (len(objs) + 1, xref))
+            return out
+
+        # Only the name uses Tj. Everything a resume is actually screened on -- the
+        # email, the phone and every section header -- arrives via ' exactly as
+        # ghostscript emits it.
+        quoted = _mini_pdf(
+            b"BT\n/F1 11 Tf\n1 0 0 1 72 720 Tm\n(Dana Reyes)Tj\n14 TL\n"
+            b"(dana@example.org | \\(415\\) 555-0142)'\n"
+            b"(SUMMARY)'\n(EXPERIENCE)'\n(EDUCATION)'\n(SKILLS)'\nET")
+        got = pdftext.text_from_bytes(quoted)
+        for token in ("dana@example.org", "555-0142", "SUMMARY", "EXPERIENCE",
+                      "EDUCATION", "SKILLS"):
+            check("quote-operator text survives extraction: %s" % token,
+                  token in got, "got=%r" % got[:90])
+        check("the Tj line still reads correctly alongside them",
+              "Dana Reyes" in got, "got=%r" % got[:90])
+
         # 3c. Every module has to agree on where the workspace is. They did not:
         # the scout defaulted to the plugin's own workspace/ while the dashboard
         # defaulted to ~/.recruit-copilot, so a default user's scouted jobs landed
