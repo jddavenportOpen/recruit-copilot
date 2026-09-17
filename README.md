@@ -14,6 +14,15 @@ is a repeatable event, a reach employer is close to one-shot, and the moment a t
 the cheap end, the expensive end is a config value standing between you and your worst instinct at
 1am. Full argument: [`06-submit-tier.md`](.claude/skills/recruit-copilot/06-submit-tier.md).
 
+## The fork that adds submission
+
+[**OpenRecruiter**](https://github.com/jddavenportOpen/open-recruiter) is the fork that adds a
+submit path, built to the five conditions in
+[`06-submit-tier.md`](.claude/skills/recruit-copilot/06-submit-tier.md) rather than inventing its
+own — per-application human approval delivered to your phone, no batch approve at any tier, and
+reach employers never auto-submitted. This repo does not change: the argument for the bar came
+first, and the tool that needed it inherits it.
+
 ## What you get
 
 Point it at the resumes you already have. It merges them into one experience bank, scores open
